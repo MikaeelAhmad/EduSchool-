@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>EduSchool Management</title>
+<meta name="theme-color" content="#15345B">
+<style>
+:root{--navy:#15345B;--teal:#159A8A;--soft:#E8F5F1;--amber:#E8B44C;--bg:#F5F7FA;--card:#fff;--text:#263445;--line:#d9e0e8;--onnavy:#fff;--bad:#b3261e;--badbg:#fdecea;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root{--navy:#8fb4e8;--teal:#3cc4b3;--soft:#12332f;--bg:#0f1722;--card:#18222f;--text:#e6ecf3;--line:#2b3a4c;--onnavy:#0f1722;--bad:#ff8a80;--badbg:#3a1d1b}}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 Inter,Manrope,"Nunito Sans",system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column}
+main{flex:1;width:100%;max-width:520px;margin:auto;padding:16px}
+h1{font-size:22px;line-height:1.25;margin:10px 0 4px;color:var(--navy)}h2{font-size:17px;margin:18px 0 8px;color:var(--navy)}
+.logo{display:flex;align-items:center;gap:10px;justify-content:center;margin:6px 0 14px}.logo b{font-size:19px;color:var(--navy);line-height:1.1}
+.bar{display:flex;align-items:center;gap:10px;background:#15345B;color:#fff;padding:10px 14px}.bar div{flex:1;line-height:1.2}.bar small{display:block;opacity:.8;font-size:12px}
+.bar button{height:40px;padding:0 12px;border-radius:8px;border:1px solid rgba(255,255,255,.5);background:transparent;color:#fff;font-size:14px;cursor:pointer}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+label{display:block;font-weight:600;margin:12px 0 4px;font-size:15px}.f{display:flex;gap:8px}
+input,select{width:100%;height:48px;font-size:16px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font-family:inherit}input:focus,select:focus{outline:2px solid var(--teal)}
+button.b{height:48px;border-radius:8px;border:0;font-size:16px;font-weight:600;cursor:pointer;width:100%;margin-top:14px;background:var(--navy);color:var(--onnavy)}button.b:disabled{opacity:.55}
+button.s{background:transparent;border:1px solid var(--line);color:var(--text);border-radius:8px;height:48px;padding:0 14px;font-size:15px;cursor:pointer;white-space:nowrap}
+button.l{background:none;border:0;color:var(--teal);font-size:15px;font-weight:600;padding:10px 0;cursor:pointer}
+.err{color:var(--bad);background:var(--badbg);border-radius:8px;padding:8px 10px;font-size:14px;margin-top:10px}.ok{background:var(--soft);border-left:4px solid var(--teal);border-radius:6px;padding:10px;font-size:14px;margin-top:10px}
+.warn{background:var(--soft);border-left:4px solid var(--amber);border-radius:6px;padding:10px;font-size:14px;margin:10px 0}
+.muted{font-size:14px;opacity:.8}.center{text-align:center}
+.sch{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}.sch:last-child{border:0}
+.pill{padding:2px 10px;border-radius:99px;font-size:12px;font-weight:700;background:var(--soft);color:var(--teal)}.pill.p{background:#fff4d6;color:#8a5a00}.pill.x{background:var(--badbg);color:var(--bad)}
+.sch button{height:40px;padding:0 12px;font-size:14px}
+footer{padding:12px;text-align:center;font-size:12px;opacity:.75;border-top:1px solid var(--line);background:var(--card)}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#15345B"/><path d="M13 23Q23 18 32 24V47Q23 41 13 45Z" fill="#fff"/><path d="M51 23Q41 18 32 24V47Q41 41 51 45Z" fill="#159A8A"/><circle cx="32" cy="13" r="3.5" fill="#E8B44C"/></symbol></defs></svg>
+<div id="bar"></div><main id="app"><p class="center muted">Loading…</p></main>
+<footer>EduSchool Management · Simplifying School Management.<br>Developed by EduResearch Hub</footer>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+// Public values only. The publishable key is safe in the browser; Row Level Security protects the data.
+// NEVER put a service_role key or database password in this file.
+const SB_URL='https://pbogzdahdwjfibgrbrwg.supabase.co';
+const SB_KEY='sb_publishable_Ncj3CQEHigg3JIzfh6_h4Q_refsHHUf';
+const ROLE={school_admin:'School Admin',principal:'Principal',vice_principal:'Vice Principal',headmaster:'Headmaster',headmistress:'Headmistress',exam_officer:'Examination Officer',teacher:'Teacher',parent:'Parent',student:'Student'};
+const $=id=>document.getElementById(id);
+const esc=x=>String(x??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const mark=s=>`<svg width="${s}" height="${s}" role="img" aria-label="EduSchool logo"><use href="#mark"/></svg>`;
+const friendly=e=>{const m=(e&&e.message)||'';
+if(/invalid login/i.test(m))return'Wrong email or password.';
+if(/not confirmed/i.test(m))return'Please confirm your email first. Check your inbox.';
+if(/already (been )?registered/i.test(m))return'This email already has an account. Try logging in.';
+if(/at least 6|password should/i.test(m))return'Password must be at least 6 characters.';
+if(/rate limit|too many/i.test(m))return'Too many attempts. Please wait a few minutes.';
+if(/fetch|network/i.test(m))return'No internet connection. Please try again.';
+return m||'Something went wrong. Please try again.'};
+let db=null;
+try{db=supabase.createClient(SB_URL,SB_KEY)}catch(e){}
+function view(html,bar){$('bar').innerHTML=bar||'';$('app').innerHTML=html;window.scrollTo(0,0)}
+const busy=(b,on,t)=>{b.disabled=on;if(t)b.textContent=on?'Please wait…':t};
+const msg=(id,text,cls='err')=>{const el=$(id);el.className=cls;el.textContent=text;el.hidden=!text};
+const head=`<div class="logo">${mark(48)}<b>EduSchool<br>Management</b></div>`;
+const pw=(id)=>`<div class="f"><input id="${id}" type="password" autocomplete="current-password"><button type="button" class="s" data-show="${id}" aria-pressed="false" style="width:84px">Show</button></div>`;
+function wireShow(){document.querySelectorAll('[data-show]').forEach(b=>b.onclick=()=>{const i=$(b.dataset.show),s=i.type==='password';i.type=s?'text':'password';b.textContent=s?'Hide':'Show'})}
+
+function login(note){view(`${head}<h1>Welcome to EduSchool Management</h1><p class="muted" style="margin:0">Manage academic records, student information and school activities with ease.</p>
+<div class="card" style="margin-top:12px"><label for="em">Email</label><input id="em" type="email" autocomplete="username" inputmode="email">
+<label for="pw">Password</label>${pw('pw')}<div id="m" class="err" hidden role="alert"></div>${note?`<div class="ok">${esc(note)}</div>`:''}
+<button class="b" id="go">Log in</button><div class="center"><button class="l" id="fp">Forgot password?</button></div></div>
+<div class="center"><button class="l" id="su">New here? Create an account</button></div>`);wireShow();
+$('go').onclick=async()=>{const e=$('em').value.trim(),p=$('pw').value;msg('m','');
+if(!e||!p)return msg('m','Enter your email and password.');
+busy($('go'),true,'Log in');const{error}=await db.auth.signInWithPassword({email:e,password:p});busy($('go'),false,'Log in');
+if(error)return msg('m',friendly(error));home()};
+$('fp').onclick=()=>forgot();$('su').onclick=()=>signup()}
+
+function signup(){view(`${head}<h1>Create an account</h1><div class="card"><label for="fn">Full name</label><input id="fn" autocomplete="name">
+<label for="em">Email</label><input id="em" type="email" autocomplete="email" inputmode="email"><label for="pw">Password (6 or more characters)</label>${pw('pw')}
+<div id="m" class="err" hidden role="alert"></div><button class="b" id="go">Create account</button></div><div class="center"><button class="l" id="bk">← Back to log in</button></div>`);wireShow();
+$('bk').onclick=()=>login();
+$('go').onclick=async()=>{const n=$('fn').value.trim(),e=$('em').value.trim(),p=$('pw').value;msg('m','');
+if(!n||!e)return msg('m','Enter your name and email.');if(p.length<6)return msg('m','Password must be at least 6 characters.');
+busy($('go'),true,'Create account');
+const{data,error}=await db.auth.signUp({email:e,password:p,options:{data:{full_name:n},emailRedirectTo:location.href.split('#')[0]}});busy($('go'),false,'Create account');
+if(error)return msg('m',friendly(error));
+if(data.session)return home();login('Account created. Check your email to confirm it, then log in.')}}
+
+function forgot(){view(`${head}<h1>Reset password</h1><div class="card"><label for="em">Your email</label><input id="em" type="email" inputmode="email">
+<div id="m" class="err" hidden role="alert"></div><button class="b" id="go">Send reset link</button></div><div class="center"><button class="l" id="bk">← Back</button></div>`);
+$('bk').onclick=()=>login();
+$('go').onclick=async()=>{const e=$('em').value.trim();if(!e)return msg('m','Enter your email.');busy($('go'),true,'Send reset link');
+const{error}=await db.auth.resetPasswordForEmail(e,{redirectTo:location.href.split('#')[0]});busy($('go'),false,'Send reset link');
+if(error)return msg('m',friendly(error));msg('m','If that email has an account, a reset link has been sent.','ok')}}
+
+function recovery(){view(`${head}<h1>Choose a new password</h1><div class="card"><label for="pw">New password</label>${pw('pw')}<div id="m" class="err" hidden role="alert"></div><button class="b" id="go">Save password</button></div>`);wireShow();
+$('go').onclick=async()=>{const p=$('pw').value;if(p.length<6)return msg('m','Password must be at least 6 characters.');busy($('go'),true,'Save password');
+const{error}=await db.auth.updateUser({password:p});busy($('go'),false,'Save password');if(error)return msg('m',friendly(error));home()}}
+
+const barHtml=(title,sub)=>`<div class="bar">${mark(34)}<div><b>${esc(title)}</b><small>${esc(sub)}</small></div><button id="out">Log out</button></div>`;
+const wireOut=()=>{$('out').onclick=async()=>{await db.auth.signOut();login()}};
+
+async function home(){
+const{data:u}=await db.auth.getUser();const user=u&&u.user;if(!user)return login();
+const{data:prof}=await db.from('profiles').select('full_name,is_super_admin').eq('id',user.id).maybeSingle();
+const{data:mem,error:me}=await db.from('school_members').select('role,school_id,schools(name,status)').eq('user_id',user.id).eq('active',true);
+if(me)return view(`<div class="err">Could not load your account: ${esc(me.message)}</div>`);
+const name=(prof&&prof.full_name)||user.email;
+if(prof&&prof.is_super_admin)return superAdmin(name);
+if(!mem||!mem.length)return noSchool(name);
+const m=mem[0],s=m.schools||{};
+view(`<h1>${esc(ROLE[m.role]||m.role)} portal</h1><p class="muted" style="margin:0 0 10px">${esc(name)} · ${esc(s.name||'')}</p>
+${s.status==='active'?`<div class="ok">Your school is active. Features for your role are being connected step by step.</div>`:`<div class="warn"><b>Waiting for approval.</b> Your school is ${esc(s.status||'pending')}. The platform owner must activate it before you can use it.</div>`}
+<div class="card"><p class="muted" style="margin:0">Signed in securely. Next phases connect students, scores, results and report cards to this account.</p></div>`,
+barHtml(s.name||'EduSchool',ROLE[m.role]||m.role));wireOut()}
+
+function noSchool(name){view(`<h1>Welcome, ${esc(name)}</h1>
+<div class="card"><h2 style="margin-top:0">Register your school</h2><p class="muted" style="margin:0">You will become the School Admin. The platform owner approves new schools.</p>
+<label for="sn">School name</label><input id="sn"><label for="st">School type</label><select id="st"><option value="nursery">Nursery</option><option value="primary" selected>Primary</option><option value="secondary">Secondary</option><option value="nursery_primary">Nursery and Primary</option><option value="primary_secondary">Primary and Secondary</option><option value="all_levels">Nursery, Primary and Secondary</option></select>
+<label for="sa">Address</label><input id="sa"><label for="sp">School phone</label><input id="sp" inputmode="tel"><label for="se">School email</label><input id="se" type="email">
+<div id="m" class="err" hidden role="alert"></div><button class="b" id="go">Register school</button></div>
+<div class="card"><p class="muted" style="margin:0">Teacher or parent? Your school adds you. Ask the school administrator to add this email address.</p></div>`,barHtml('EduSchool','Account'));wireOut();
+$('go').onclick=async()=>{const n=$('sn').value.trim();if(!n)return msg('m','Enter the school name.');busy($('go'),true,'Register school');
+const{error}=await db.rpc('register_school',{p_name:n,p_type:$('st').value,p_address:$('sa').value.trim()||null,p_phone:$('sp').value.trim()||null,p_email:$('se').value.trim()||null});
+busy($('go'),false,'Register school');if(error)return msg('m',friendly(error));home()}}
+
+async function superAdmin(name){
+const{data:L,error}=await db.from('schools').select('id,name,school_type,status,created_at').order('created_at',{ascending:false});
+if(error)return view(`<div class="err">Could not load schools: ${esc(error.message)}</div>`);
+const c=s=>L.filter(x=>x.status===s).length;
+view(`<h1>Platform overview</h1><p class="muted" style="margin:0 0 10px">${esc(name)} · Super Admin</p>
+<div class="card"><b>${L.length}</b> schools · <b>${c('pending')}</b> waiting · <b>${c('active')}</b> active · <b>${c('suspended')}</b> suspended</div>
+<h2>Schools</h2><div class="card">${L.length?L.map(s=>`<div class="sch"><div><b>${esc(s.name)}</b><div class="muted">${esc(s.school_type)} · ${new Date(s.created_at).toLocaleDateString()}</div></div>
+<div style="display:flex;gap:6px;align-items:center"><span class="pill ${s.status==='active'?'':s.status==='pending'?'p':'x'}">${esc(s.status)}</span>
+${s.status!=='active'?`<button class="s" data-id="${s.id}" data-st="active">Activate</button>`:`<button class="s" data-id="${s.id}" data-st="suspended">Suspend</button>`}</div></div>`).join(''):'<p class="muted" style="margin:0">No schools registered yet.</p>'}</div>
+<div id="m" class="err" hidden role="alert"></div>`,barHtml('EduSchool Management','Super Admin'));wireOut();
+document.querySelectorAll('[data-id]').forEach(b=>b.onclick=async()=>{
+if(b.dataset.st==='suspended'&&!confirm('Suspend this school? Its users will lose access until it is activated again.'))return;
+b.disabled=true;const{error}=await db.from('schools').update({status:b.dataset.st}).eq('id',b.dataset.id);
+if(error){b.disabled=false;return msg('m',friendly(error))}superAdmin(name)})}
+
+(async function start(){
+if(!db){view(`<div class="err">The app could not load its connection library. Check your internet and reload.</div>`);return}
+db.auth.onAuthStateChange(ev=>{if(ev==='PASSWORD_RECOVERY')recovery()});
+const{data}=await db.auth.getSession();
+if(location.hash.includes('type=recovery'))return;
+data&&data.session?home():login()})();
+</script></body></html>
