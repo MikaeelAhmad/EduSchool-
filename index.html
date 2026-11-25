@@ -151,8 +151,8 @@ async function count(t,sid){const r=await db.from(t).select('id',{count:'exact',
 async function adminHome(c){
 const[cl,sc,su,st]=await Promise.all(['classes','sections','subjects','students'].map(t=>count(t,c.sid)));
 view(`<h1>School Admin portal</h1><p class="muted" style="margin:0 0 10px">${esc(c.uname)} · ${esc(c.name)}</p>
-<div class="card"><b>${cl}</b> classes · <b>${sc}</b> sections · <b>${su}</b> subjects · <b>${st}</b> students</div>
-${menu('gs','Set up school','Session, classes, sections and subjects')}
+<div class="card"><b>${cl}</b> classes · <b>${sc}</b> class arms · <b>${su}</b> subjects · <b>${st}</b> students</div>
+${menu('gs','Set up school','Session, classes, class arms and subjects')}
 <div class="card"><p class="muted" style="margin:0">Next steps being connected: add students, assign teachers, scores and report cards.</p></div>`,barHtml(c.name,'School Admin'));wireOut();
 $('gs').onclick=()=>setup(c)}
 
@@ -170,34 +170,39 @@ view(`<button class="l" id="bk">← Back</button><h1>Set up school</h1>${note?`<
 <div id="m" class="err" hidden role="alert"></div>
 <div class="card"><h2 style="margin-top:0">1. Academic session</h2>
 ${cur?`<p style="margin:0 0 8px"><b>${esc(cur.name)}</b> <span class="pill">current</span><br><span class="muted">Terms 1, 2 and 3 are set up.</span></p>`:'<p class="muted" style="margin:0 0 8px">No session yet.</p>'}
-<label for="ns">${cur?'Start a new session':'Session name'} (example 2026/2027)</label><input id="ns" inputmode="numeric" placeholder="2026/2027"><button class="b" id="cs">Create session</button></div>
-<div class="card"><h2 style="margin-top:0">2. Classes</h2><p class="muted" style="margin:0">Tick the classes your school has. Each new class gets Section A.</p>
+<label for="ns">${cur?'Start a new session':'Session'}: type the starting year (example 2026)</label><input id="ns" inputmode="numeric" placeholder="2026"><p class="muted" id="sp" style="margin:4px 0 0"></p><button class="b" id="cs">Create session</button></div>
+<div class="card"><h2 style="margin-top:0">2. Classes</h2><p class="muted" style="margin:0">Tick the classes your school has. Choose the class arms below.</p>
 ${LEVELS.map(l=>`<fieldset><legend>${l[0]}</legend>${l[2].map(n=>`<label class="chk"><input type="checkbox" class="cls" value="${n}" ${have.has(n)?'checked disabled':''}> ${n}</label>`).join('')}</fieldset>`).join('')}
-<button class="b" id="ac">Add ticked classes</button></div>
-<div class="card"><h2 style="margin-top:0">3. Sections</h2>
-${classes.length?classes.map(x=>`<div style="margin-bottom:6px"><b>${esc(x.name)}</b><div class="chips">${sec.data.filter(y=>y.class_id===x.id).map(y=>`<span class="chip">${esc(y.name)}</span>`).sort().join('')||'<span class="muted">no sections</span>'}</div></div>`).join(''):'<p class="muted" style="margin:0">Add classes first.</p>'}
-${classes.length?`<div class="two"><div><label for="sc">Class</label><select id="sc">${classes.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select></div><div><label for="sn">New section</label><input id="sn" maxlength="3" placeholder="B"></div></div><button class="b" id="as">Add section</button>`:''}</div>
+<fieldset><legend>Class arms for the new classes</legend>${['A','B','C','D','E'].map(a=>`<label class="chk"><input type="checkbox" class="arm" value="${a}" ${a==='A'?'checked':''}> Arm ${a}</label>`).join('')}</fieldset><button class="b" id="ac">Add ticked classes</button></div>
+<div class="card"><h2 style="margin-top:0">3. Class arms</h2>
+${classes.length?classes.map(x=>`<div style="margin-bottom:6px"><b>${esc(x.name)}</b><div class="chips">${sec.data.filter(y=>y.class_id===x.id).map(y=>`<span class="chip">${esc(y.name)}</span>`).sort().join('')||'<span class="muted">no arms</span>'}</div></div>`).join(''):'<p class="muted" style="margin:0">Add classes first.</p>'}
+${classes.length?`<div class="two"><div><label for="sc">Add to</label><select id="sc"><option value="all">All classes</option>${LEVELS.filter(l=>classes.some(x=>x.level===l[1])).map(l=>`<option value="lv:${l[1]}">All ${l[0]} classes</option>`).join('')}${classes.map(x=>`<option value="${x.id}">${esc(x.name)} only</option>`).join('')}</select></div><div><label for="sn">New arm</label><input id="sn" maxlength="3" placeholder="B"></div></div><button class="b" id="as">Add arm</button>`:''}</div>
 <div class="card"><h2 style="margin-top:0">4. Subjects</h2>
 ${sub.data.length?`<div class="chips">${sub.data.map(x=>`<span class="chip">${esc(x.name)}</span>`).join('')}</div>`:'<p class="muted" style="margin:0">No subjects yet.</p>'}
 <label for="sb">Add subjects (one per line or separated by commas)</label><textarea id="sb" placeholder="Mathematics&#10;English Language"></textarea>
 <button class="l" id="fc">Fill with common subjects</button><button class="b" id="asb" style="margin-top:4px">Add subjects</button></div>`,barHtml(c.name,'School Admin'));wireOut();
 $('bk').onclick=()=>adminHome(c);
-$('cs').onclick=async()=>{const n=$('ns').value.trim(),mm=/^(\d{4})\/(\d{4})$/.exec(n);
-if(!mm||+mm[2]!==+mm[1]+1)return msg('m','Write the session like 2026/2027.');busy($('cs'),true,'Create session');
+$('ns').oninput=()=>{const m=/(\d{4})/.exec($('ns').value);$('sp').textContent=m?'Will be saved as '+m[1]+'/'+(+m[1]+1):''};
+$('cs').onclick=async()=>{const ym=/(\d{4})/.exec($('ns').value),y=ym?+ym[1]:0;
+if(y<2000||y>2100)return msg('m','Type the starting year, like 2026.');const n=y+'/'+(y+1);busy($('cs'),true,'Create session');
 let r=await db.from('academic_sessions').update({is_current:false}).eq('school_id',c.sid);
 if(!r.error)r=await db.from('academic_sessions').insert({school_id:c.sid,name:n,is_current:true}).select('id').single();
 if(r.error){busy($('cs'),false,'Create session');return msg('m',dupMsg(r.error))}
 const t=await db.from('terms').insert([1,2,3].map(i=>({school_id:c.sid,session_id:r.data.id,name:'Term '+i,is_current:i===1})));
 if(t.error)return msg('m',friendly(t.error));setup(c,`Session ${n} created with 3 terms.`)};
 $('ac').onclick=async()=>{const names=[...document.querySelectorAll('.cls')].filter(x=>x.checked&&!x.disabled).map(x=>x.value);
-if(!names.length)return msg('m','Tick at least one new class.');busy($('ac'),true,'Add ticked classes');
+if(!names.length)return msg('m','Tick at least one new class.');
+const arms=[...document.querySelectorAll('.arm')].filter(x=>x.checked).map(x=>x.value);if(!arms.length)return msg('m','Tick at least one class arm.');busy($('ac'),true,'Add ticked classes');
 const r=await db.from('classes').insert(names.map(n=>({school_id:c.sid,name:n,level:levelOf(n)}))).select('id,name');
 if(r.error){busy($('ac'),false,'Add ticked classes');return msg('m',dupMsg(r.error))}
-const s2=await db.from('sections').insert(r.data.map(x=>({school_id:c.sid,class_id:x.id,name:'A'})));
-if(s2.error)return msg('m',friendly(s2.error));setup(c,`${names.length} class${names.length>1?'es':''} added, each with Section A.`)};
-if($('as'))$('as').onclick=async()=>{const n=$('sn').value.trim().toUpperCase();if(!/^[A-Z0-9]{1,3}$/.test(n))return msg('m','Section name: 1 to 3 letters or numbers, like B.');
-busy($('as'),true,'Add section');const r=await db.from('sections').insert({school_id:c.sid,class_id:$('sc').value,name:n});
-if(r.error){busy($('as'),false,'Add section');return msg('m',dupMsg(r.error))}setup(c,`Section ${n} added.`)};
+const s2=await db.from('sections').insert(r.data.flatMap(x=>arms.map(a=>({school_id:c.sid,class_id:x.id,name:a}))));
+if(s2.error)return msg('m',friendly(s2.error));setup(c,`${names.length} class${names.length>1?'es':''} added with arm${arms.length>1?'s':''} ${arms.join(', ')}.`)};
+if($('as'))$('as').onclick=async()=>{const n=$('sn').value.trim().toUpperCase();if(!/^[A-Z0-9]{1,3}$/.test(n))return msg('m','Class arm: 1 to 3 letters or numbers, like B.');
+const t=$('sc').value,targets=t==='all'?classes:t.startsWith('lv:')?classes.filter(x=>x.level===t.slice(3)):classes.filter(x=>x.id===t);
+const rows=targets.filter(x=>!sec.data.some(y=>y.class_id===x.id&&y.name===n)).map(x=>({school_id:c.sid,class_id:x.id,name:n}));
+if(!rows.length)return msg('m','Arm '+n+' already exists there.');
+busy($('as'),true,'Add arm');const r=await db.from('sections').insert(rows);
+if(r.error){busy($('as'),false,'Add arm');return msg('m',dupMsg(r.error))}setup(c,`Arm ${n} added to ${rows.length} class${rows.length>1?'es':''}.`)};
 $('fc').onclick=()=>{$('sb').value=COMMON.filter(x=>!sub.data.some(y=>y.name.toLowerCase()===x.toLowerCase())).join('\n')};
 $('asb').onclick=async()=>{const seen=new Set(sub.data.map(x=>x.name.toLowerCase()));
 const names=[...new Set($('sb').value.split(/[\n,]/).map(x=>x.trim().replace(/\s+/g,' ')).filter(Boolean))].filter(x=>!seen.has(x.toLowerCase()));
