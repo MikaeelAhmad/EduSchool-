@@ -36,6 +36,7 @@ table{border-collapse:collapse;width:100%}th,td{padding:6px;border-bottom:1px so
 .bad{color:var(--bad);font-size:13px}.wn{color:#8a5a00;font-size:13px}.okc{color:var(--teal);font-size:13px}.x{width:40px;height:40px;border:1px solid var(--line);background:var(--card);color:var(--bad);border-radius:8px;font-size:18px;cursor:pointer;padding:0}
 .tabs{display:flex;gap:6px;margin:8px 0}.tab{flex:1;height:44px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text);font-size:15px;font-weight:600;cursor:pointer}.tab[aria-pressed=true]{background:var(--navy);color:var(--onnavy);border-color:var(--navy)}
 .sum{display:flex;gap:12px;flex-wrap:wrap;font-size:14px;margin:6px 0 10px}
+.rmx{border:0;background:none;color:var(--bad);font-size:18px;padding:0 0 0 6px;cursor:pointer;line-height:1}
 footer{padding:12px;text-align:center;font-size:12px;opacity:.75;border-top:1px solid var(--line);background:var(--card)}
 </style></head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#15345B"/><path d="M13 23Q23 18 32 24V47Q23 41 13 45Z" fill="#fff"/><path d="M51 23Q41 18 32 24V47Q41 41 51 45Z" fill="#159A8A"/><circle cx="32" cy="13" r="3.5" fill="#E8B44C"/></symbol></defs></svg>
@@ -166,9 +167,9 @@ const[cl,sc,su,st]=await Promise.all(['classes','sections','subjects','students'
 view(`<h1>School Admin portal</h1><p class="muted" style="margin:0 0 10px">${esc(c.uname)} · ${esc(c.name)}<br>${c.ownership==='public'?'Public':'Private'} school · ${esc(structLabel(c.levels))}</p>
 <div class="card"><b>${cl}</b> classes · <b>${sc}</b> class arms · <b>${su}</b> subjects · <b>${st}</b> students</div>
 ${menu('gs','Set up school','Session, classes, class arms and subjects')}
-${menu('ge','Add students','Paste a list or upload Excel/CSV')}${menu('gl','Students','Search and view enrolled students')}${menu('gt','Staff and leadership','Heads, principals, teachers, exam officers')}
+${menu('ge','Add students','Paste a list or upload Excel/CSV')}${menu('gl','Students','Search and view enrolled students')}${menu('gt','Staff and leadership','Heads, principals, teachers, exam officers')}${menu('gk','Assign teachers','Give teachers their classes and subjects')}
 <div class="card"><p class="muted" style="margin:0">Next steps being connected: assign teachers, scores, result approval and report cards.</p></div>`,barHtml(c.name,'School Admin'));wireOut();
-$('gs').onclick=()=>setup(c);$('ge').onclick=()=>enrol(c);$('gl').onclick=()=>studentList(c);$('gt').onclick=()=>staff(c)}
+$('gs').onclick=()=>setup(c);$('ge').onclick=()=>enrol(c);$('gl').onclick=()=>studentList(c);$('gt').onclick=()=>staff(c);$('gk').onclick=()=>assign(c)}
 
 async function setup(c,note){
 const[ses,cls,sec,sub]=await Promise.all([
@@ -180,6 +181,7 @@ const bad=[ses,cls,sec,sub].find(r=>r.error);
 if(bad)return view(`<div class="err">Could not load setup: ${esc(bad.error.message)}</div>`,barHtml(c.name,'School Admin'));
 const classes=[...cls.data].sort((a,b)=>ALLC.indexOf(a.name)-ALLC.indexOf(b.name)),have=new Set(classes.map(x=>x.name));
 const cur=ses.data.find(x=>x.is_current);
+const cm=await db.from('assessment_components').select('name,max_score').eq('school_id',c.sid).order('sort');
 view(`<button class="l" id="bk">← Back</button><h1>Set up school</h1>${note?`<div class="ok">${esc(note)}</div>`:''}
 <div id="m" class="err" hidden role="alert"></div>
 <div class="card"><h2 style="margin-top:0">1. Academic session</h2>
@@ -194,7 +196,8 @@ ${classes.length?`<div class="two"><div><label for="sc">Add to</label><select id
 <div class="card"><h2 style="margin-top:0">4. Subjects</h2>
 ${sub.data.length?`<div class="chips">${sub.data.map(x=>`<span class="chip">${esc(x.name)}</span>`).join('')}</div>`:'<p class="muted" style="margin:0">No subjects yet.</p>'}
 <label for="sb">Add subjects (one per line or separated by commas)</label><textarea id="sb" placeholder="Mathematics&#10;English Language"></textarea>
-<button class="l" id="fc">Fill with common subjects</button><button class="b" id="asb" style="margin-top:4px">Add subjects</button></div>`,barHtml(c.name,'School Admin'));wireOut();
+<button class="l" id="fc">Fill with common subjects</button><button class="b" id="asb" style="margin-top:4px">Add subjects</button></div>
+<div class="card"><h2 style="margin-top:0">5. Scores and grades</h2>${cm.error?'<p class="muted" style="margin:0">Score settings are not ready yet (database update 0005 is needed).</p>':cm.data.length?`<div class="chips">${cm.data.map(x=>`<span class="chip">${esc(x.name)} ${x.max_score}</span>`).join('')}</div><p class="muted" style="margin:4px 0 0">Total ${cm.data.reduce((a,x)=>a+Number(x.max_score),0)}. Grades A to F use the standard bands.</p>`:'<p class="muted" style="margin:0">Not set yet. Standard: First CA 20, Second CA 20, Exam 60 = 100, grades A to F.</p><button class="b" id="ud">Use the standard structure</button>'}</div>`,barHtml(c.name,'School Admin'));wireOut();
 $('bk').onclick=()=>adminHome(c);
 $('ns').oninput=()=>{const m=/(\d{4})/.exec($('ns').value);$('sp').textContent=m?'Will be saved as '+m[1]+'/'+(+m[1]+1):''};
 $('cs').onclick=async()=>{const ym=/(\d{4})/.exec($('ns').value),y=ym?+ym[1]:0;
@@ -217,6 +220,7 @@ const rows=targets.filter(x=>!sec.data.some(y=>y.class_id===x.id&&y.name===n)).m
 if(!rows.length)return msg('m','Arm '+n+' already exists there.');
 busy($('as'),true,'Add arm');const r=await db.from('sections').insert(rows);
 if(r.error){busy($('as'),false,'Add arm');return msg('m',dupMsg(r.error))}setup(c,`Arm ${n} added to ${rows.length} class${rows.length>1?'es':''}.`)};
+if($('ud'))$('ud').onclick=async()=>{busy($('ud'),true,'Use the standard structure');const r=await db.rpc('ensure_defaults',{p_school:c.sid});if(r.error){busy($('ud'),false,'Use the standard structure');return msg('m',friendly(r.error))}setup(c,'Standard scores and grades saved.')};
 $('fc').onclick=()=>{$('sb').value=COMMON.filter(x=>!sub.data.some(y=>y.name.toLowerCase()===x.toLowerCase())).join('\n')};
 $('asb').onclick=async()=>{const seen=new Set(sub.data.map(x=>x.name.toLowerCase()));
 const names=[...new Set($('sb').value.split(/[\n,]/).map(x=>x.trim().replace(/\s+/g,' ')).filter(Boolean))].filter(x=>!seen.has(x.toLowerCase()));
@@ -396,6 +400,35 @@ $('add').onclick=async()=>{const e=$('se').value.trim(),role=$('sr').value;if(!/
 let scope=null;if(groups>=2&&LEAD.includes(role)){const o=sc.find(x=>x[0]===$('ss').value);scope=o&&o[2]?o[2]:null}
 busy($('add'),true,'Add to school');const x=await db.rpc('add_school_member',{p_school:c.sid,p_email:e,p_role:role,p_scope:scope});
 busy($('add'),false,'Add to school');if(x.error)return msg('m',friendly(x.error));staff(c,`${x.data||'Staff member'} added as ${ROLE[role]}.`)}}
+
+
+// ===== School Admin: assign teachers to class arms and subjects =====
+async function assign(c,note){
+const[so,tr,sj,as]=await Promise.all([secOptions(c),
+db.from('school_members').select('user_id,profiles(full_name)').eq('school_id',c.sid).eq('role','teacher').eq('active',true),
+db.from('subjects').select('id,name').eq('school_id',c.sid).order('name'),
+db.from('teacher_assignments').select('id,teacher_id,section_id,subject_id').eq('school_id',c.sid)]);
+const bad=[so,tr,sj,as].find(x=>x.error);
+const back=`<button class="l" id="bk">← Back</button><h1>Assign teachers</h1>`;
+if(bad){view(back+`<div class="err">Could not load: ${esc(bad.error.message)}</div>`,barHtml(c.name,'School Admin'));wireOut();$('bk').onclick=()=>adminHome(c);return}
+const miss=[!tr.data.length&&'a teacher (Staff and leadership → add a Teacher)',!so.data.length&&'classes and class arms',!sj.data.length&&'subjects'].filter(Boolean);
+if(miss.length){view(back+`<div class="warn">First add: ${miss.join(', ')}.</div>`,barHtml(c.name,'School Admin'));wireOut();$('bk').onclick=()=>adminHome(c);return}
+const sn=Object.fromEntries(so.data.map(x=>[x.id,x.label])),bn=Object.fromEntries(sj.data.map(x=>[x.id,x.name])),tn=x=>(x.profiles&&x.profiles.full_name)||'Teacher';
+view(back+`${note?`<div class="ok">${esc(note)}</div>`:''}<div id="m" class="err" hidden role="alert"></div>
+<div class="card"><label for="tt">Teacher</label><select id="tt">${tr.data.map(x=>`<option value="${x.user_id}">${esc(tn(x))}</option>`).join('')}</select>
+<fieldset><legend>Class arms</legend>${so.data.map(x=>`<label class="chk"><input type="checkbox" class="ar" value="${x.id}"> ${esc(x.label)}</label>`).join('')}</fieldset>
+<fieldset><legend>Subjects</legend>${sj.data.map(x=>`<label class="chk"><input type="checkbox" class="sb" value="${x.id}"> ${esc(x.name)}</label>`).join('')}</fieldset>
+<button class="b" id="go">Assign</button><p class="muted" style="margin:6px 0 0">Every ticked class arm gets every ticked subject for this teacher.</p></div>
+<h2>Current assignments</h2>${tr.data.map(t=>{const mine=as.data.filter(a=>a.teacher_id===t.user_id);return`<div class="card"><b>${esc(tn(t))}</b><div class="chips">${mine.length?mine.map(a=>`<span class="chip">${esc(sn[a.section_id]||'?')} · ${esc(bn[a.subject_id]||'?')}<button class="rmx" data-del="${a.id}" aria-label="Remove">×</button></span>`).join(''):'<span class="muted">nothing assigned yet</span>'}</div></div>`}).join('')}`,barHtml(c.name,'School Admin'));wireOut();
+$('bk').onclick=()=>adminHome(c);
+document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{b.disabled=true;const x=await db.from('teacher_assignments').delete().eq('id',b.dataset.del);if(x.error){b.disabled=false;return msg('m',friendly(x.error))}assign(c,'Removed.')});
+$('go').onclick=async()=>{const t=$('tt').value,arms=[...document.querySelectorAll('.ar')].filter(x=>x.checked).map(x=>x.value),subs=[...document.querySelectorAll('.sb')].filter(x=>x.checked).map(x=>x.value);
+if(!arms.length||!subs.length)return msg('m','Tick at least one class arm and one subject.');
+const have=new Set(as.data.filter(a=>a.teacher_id===t).map(a=>a.section_id+'|'+a.subject_id)),rows=[];
+arms.forEach(a=>subs.forEach(b=>{if(!have.has(a+'|'+b))rows.push({school_id:c.sid,teacher_id:t,section_id:a,subject_id:b})}));
+if(!rows.length)return msg('m','Those are already assigned to this teacher.');if(rows.length>300)return msg('m','That is too many at once. Assign fewer class arms or subjects.');
+busy($('go'),true,'Assign');const x=await db.from('teacher_assignments').insert(rows);busy($('go'),false,'Assign');
+if(x.error)return msg('m',dupMsg(x.error));assign(c,`${rows.length} assignment${rows.length>1?'s':''} saved.`)}}
 
 (async function start(){
 if(!db){view(`<div class="err">The app could not load its connection library. Check your internet and reload.</div>`);return}
