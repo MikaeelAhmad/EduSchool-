@@ -37,6 +37,9 @@ table{border-collapse:collapse;width:100%}th,td{padding:6px;border-bottom:1px so
 .tabs{display:flex;gap:6px;margin:8px 0}.tab{flex:1;height:44px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text);font-size:15px;font-weight:600;cursor:pointer}.tab[aria-pressed=true]{background:var(--navy);color:var(--onnavy);border-color:var(--navy)}
 .sum{display:flex;gap:12px;flex-wrap:wrap;font-size:14px;margin:6px 0 10px}
 .rmx{border:0;background:none;color:var(--bad);font-size:18px;padding:0 0 0 6px;cursor:pointer;line-height:1}
+input.sc{width:66px;height:46px;font-size:16px;text-align:center;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);padding:0 4px}input.sc:focus{outline:2px solid var(--teal)}input.sc.bad{border-color:var(--bad);background:var(--badbg)}input.sc:disabled{opacity:.7}
+.sheet td:first-child,.sheet th:first-child{position:sticky;left:0;background:var(--card);z-index:1;min-width:130px;border-right:1px solid var(--line)}.sheet th:first-child{background:var(--soft)}.sheet td,.sheet th{text-align:center}.sheet td:first-child,.sheet th:first-child{text-align:left}
+.stat{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px;margin:8px 0}
 footer{padding:12px;text-align:center;font-size:12px;opacity:.75;border-top:1px solid var(--line);background:var(--card)}
 </style></head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#15345B"/><path d="M13 23Q23 18 32 24V47Q23 41 13 45Z" fill="#fff"/><path d="M51 23Q41 18 32 24V47Q41 41 51 45Z" fill="#159A8A"/><circle cx="32" cy="13" r="3.5" fill="#E8B44C"/></symbol></defs></svg>
@@ -115,6 +118,7 @@ const name=(prof&&prof.full_name)||user.email;
 if(prof&&prof.is_super_admin)return superAdmin(name);
 if(!mem||!mem.length)return noSchool(name);
 const m=mem[0],s=m.schools||{};
+if(m.role==='teacher'&&s.status==='active')return teacherHome({sid:m.school_id,name:s.name,uname:name,uid:user.id});
 if(m.role==='school_admin'&&s.status==='active')return adminHome({sid:m.school_id,name:s.name,uname:name,levels:s.levels||['nursery','primary'],ownership:s.ownership||'private'});
 view(`<h1>${esc(ROLE[m.role]||m.role)} portal</h1><p class="muted" style="margin:0 0 10px">${esc(name)} · ${esc(s.name||'')}</p>
 ${s.status==='active'?`<div class="ok">Your school is active. Features for your role are being connected step by step.</div>`:`<div class="warn"><b>Waiting for approval.</b> Your school is ${esc(s.status||'pending')}. The platform owner must activate it before you can use it.</div>`}
@@ -429,6 +433,82 @@ arms.forEach(a=>subs.forEach(b=>{if(!have.has(a+'|'+b))rows.push({school_id:c.si
 if(!rows.length)return msg('m','Those are already assigned to this teacher.');if(rows.length>300)return msg('m','That is too many at once. Assign fewer class arms or subjects.');
 busy($('go'),true,'Assign');const x=await db.from('teacher_assignments').insert(rows);busy($('go'),false,'Assign');
 if(x.error)return msg('m',dupMsg(x.error));assign(c,`${rows.length} assignment${rows.length>1?'s':''} saved.`)}}
+
+
+// ===== Teacher portal: my classes and score sheets =====
+const toC=n=>Math.round(Number(n)*100);
+function rowCalc(comps,marks){let cents=0,miss=0,bad=[];for(const k of comps){const v=marks[k.key];if(v===undefined||v===null||String(v).trim()===''){miss++;continue}
+const n=Number(String(v).replace(',','.'));if(!Number.isFinite(n)||n<0||n>Number(k.max_score)){bad.push(k.key);continue}cents+=toC(n)}
+return{total:(miss||bad.length)?null:cents/100,miss,bad}}
+function rankPos(vals){const o=vals.map((v,i)=>[v,i]).filter(x=>x[0]!==null).sort((a,b)=>b[0]-a[0]),p=vals.map(()=>null);o.forEach((x,k)=>{p[x[1]]=k&&o[k-1][0]===x[0]?p[o[k-1][1]]:k+1});return p}
+const ordn=n=>{if(n===null)return'–';const v=n%100;if(v>=11&&v<=13)return n+'th';return n+({1:'st',2:'nd',3:'rd'}[n%10]||'th')};
+const gradeOf=(t,bands)=>{const b=[...bands].sort((x,y)=>y.min_score-x.min_score).find(x=>t>=Number(x.min_score));return b?b.grade:'–'};
+const SHEET_ST={draft:['Draft',''],submitted:['Submitted','p'],under_review:['Under review','p'],returned:['Returned for correction','x'],approved:['Approved',''],published:['Published','']};
+
+async function teacherHome(c){
+const[tm,as]=await Promise.all([
+db.from('terms').select('id,name,closed,academic_sessions(name,is_current)').eq('school_id',c.sid).eq('closed',false),
+db.from('teacher_assignments').select('id,section_id,subject_id,sections(name,classes(name)),subjects(name)').eq('teacher_id',c.uid)]);
+const bad=[tm,as].find(x=>x.error);
+if(bad)return view(`<div class="err">Could not load: ${esc(bad.error.message)}</div>`,barHtml(c.name,'Teacher'));
+const term=(tm.data||[]).find(t=>t.academic_sessions&&t.academic_sessions.is_current&&(t.is_current!==false));
+const cur=(tm.data||[]).filter(t=>t.academic_sessions&&t.academic_sessions.is_current).sort((a,b)=>a.name.localeCompare(b.name))[0];
+const T=cur||term;
+const list=as.data||[];
+let sheets=[];if(T&&list.length){const r=await db.from('score_sheets').select('section_id,subject_id,status').eq('term_id',T.id);sheets=r.data||[]}
+const lbl=a=>(a.sections&&a.sections.classes?a.sections.classes.name+' '+a.sections.name:'Class')+' · '+(a.subjects?a.subjects.name:'Subject');
+view(`<h1>My classes</h1><p class="muted" style="margin:0 0 10px">${esc(c.uname)} · ${esc(c.name)}${T?`<br>${esc(T.academic_sessions.name)} · ${esc(T.name)}`:''}</p>
+${!T?'<div class="warn">No current term yet. Ask the School Admin to set up the session and terms.</div>':!list.length?'<div class="warn">No classes assigned to you yet. Ask the School Admin to assign your classes and subjects.</div>':
+list.map((a,i)=>{const sh=sheets.find(x=>x.section_id===a.section_id&&x.subject_id===a.subject_id),p=SHEET_ST[sh?sh.status:'draft'];
+return`<button class="menu" data-i="${i}"><span><b>${esc(lbl(a))}</b><small>${sh?p[0]:'Not started'}</small></span><span class="go">${sh&&!['draft','returned'].includes(sh.status)?'View':'Enter scores'}</span></button>`}).join('')}
+<div class="card"><p class="muted" style="margin:0">You need an internet connection to enter scores. Offline entry is planned for a later phase.</p></div>`,barHtml(c.name,'Teacher'));wireOut();
+document.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>teacherSheet(c,T,list[+b.dataset.i],lbl(list[+b.dataset.i])))}
+
+async function teacherSheet(c,term,a,label,note){
+const o=await db.rpc('open_sheet',{p_term:term.id,p_section:a.section_id,p_subject:a.subject_id});
+const back=`<button class="l" id="bk">← My classes</button>`,fail=m=>{view(back+`<h1>${esc(label)}</h1><div class="err">${esc(m)}</div>`,barHtml(c.name,'Teacher'));wireOut();$('bk').onclick=()=>teacherHome(c)};
+if(o.error)return fail(friendly(o.error));
+const sid=o.data;
+const[sh,cm,gb,st,en]=await Promise.all([
+db.from('score_sheets').select('id,status,review_note').eq('id',sid).single(),
+db.from('assessment_components').select('key,name,max_score').eq('school_id',c.sid).order('sort'),
+db.from('grade_bands').select('min_score,grade').eq('school_id',c.sid),
+db.from('students').select('id,admission_no,full_name').eq('section_id',a.section_id).eq('status','enrolled').order('full_name'),
+db.from('score_entries').select('student_id,marks').eq('sheet_id',sid)]);
+const e0=[sh,cm,gb,st,en].find(x=>x.error);if(e0)return fail(e0.error.message);
+const comps=cm.data||[],bands=gb.data||[],stu=st.data||[],status=sh.data.status,editable=['draft','returned'].includes(status);
+if(!comps.length)return fail('Score settings are not set yet. Ask the School Admin (Set up school, section 5).');
+if(!stu.length)return fail('There are no students in this class yet.');
+const M={};stu.forEach(x=>M[x.id]={});(en.data||[]).forEach(x=>{if(M[x.student_id])Object.entries(x.marks||{}).forEach(([k,v])=>{M[x.student_id][k]=String(v)})});
+const SS=SHEET_ST[status],maxAll=comps.reduce((t,k)=>t+Number(k.max_score),0);
+const msgBy={submitted:'Submitted. The examination officer will review it. You cannot edit now.',under_review:'Under review. You cannot edit now.',approved:'Approved. Results are locked.',published:'Published. Results are locked.'};
+view(back+`<h1>${esc(label)}</h1><p class="muted" style="margin:0 0 6px">${esc(term.academic_sessions.name)} · ${esc(term.name)}</p>
+${note?`<div class="ok">${esc(note)}</div>`:''}${status==='returned'&&sh.data.review_note?`<div class="warn"><b>Returned for correction:</b> ${esc(sh.data.review_note)}</div>`:''}${msgBy[status]?`<div class="warn">${msgBy[status]}</div>`:''}
+<div class="stat"><span id="cn"></span><span class="pill ${SS[1]}" id="sv">${editable?'Saved':SS[0]}</span></div>
+<div class="wrap"><table class="sheet" style="min-width:${180+comps.length*80}px"><thead><tr><th>Student</th>${comps.map(k=>`<th>${esc(k.name)}<br><small>/${k.max_score}</small></th>`).join('')}<th>Total<br><small>/${maxAll}</small></th><th>Grade</th><th>Pos.</th></tr></thead>
+<tbody>${stu.map(x=>`<tr data-s="${x.id}"><td>${esc(x.full_name)}<br><small class="muted">${esc(x.admission_no)}</small></td>${comps.map(k=>`<td><input class="sc" inputmode="decimal" autocomplete="off" data-k="${k.key}" value="${esc(M[x.id][k.key]??'')}" ${editable?'':'disabled'} aria-label="${esc(x.full_name)} ${esc(k.name)}"></td>`).join('')}<td class="tt"><b></b></td><td class="gg"></td><td class="pp"></td></tr>`).join('')}</tbody></table></div>
+<div id="m" class="err" hidden role="alert"></div>${editable?'<button class="b" id="sb">Submit for review</button><p class="muted" style="margin:6px 0 0">Scores save automatically. Submit when every student has every score.</p>':''}`,barHtml(c.name,'Teacher'));wireOut();
+$('bk').onclick=()=>teacherHome(c);
+const dirty=new Set();let timer=null,retry=null,inflight=Promise.resolve();
+function calc(){const R=stu.map(x=>rowCalc(comps,M[x.id])),pos=rankPos(R.map(r=>r.total));let done=0,anyBad=false;
+R.forEach((r,i)=>{const tr=document.querySelector(`tr[data-s="${stu[i].id}"]`);if(!tr)return;if(r.total!==null)done++;if(r.bad.length)anyBad=true;
+tr.querySelectorAll('input.sc').forEach(inp=>inp.classList.toggle('bad',r.bad.includes(inp.dataset.k)));
+tr.querySelector('.tt b').textContent=r.total===null?'–':r.total;tr.querySelector('.gg').textContent=r.total===null?'–':gradeOf(r.total,bands);tr.querySelector('.pp').textContent=ordn(pos[i])});
+$('cn').textContent=`${done} of ${stu.length} complete`;if($('sb'))$('sb').disabled=!(done===stu.length&&!anyBad);return{R,done,anyBad}}
+const setSv=(t,cls)=>{const e=$('sv');if(e){e.textContent=t;e.className='pill '+(cls||'')}};
+function flush(){clearTimeout(timer);const ids=[...dirty],rows=[];
+ids.forEach(id=>{const r=rowCalc(comps,M[id]);if(r.bad.length)return;const marks={};comps.forEach(k=>{const v=M[id][k.key];if(v!==undefined&&String(v).trim()!=='')marks[k.key]=Number(String(v).replace(',','.'))});rows.push({student_id:id,marks})});
+if(!rows.length){if(ids.length)setSv('Fix the red scores to save','x');return inflight}
+setSv('Saving…','p');
+inflight=inflight.then(async()=>{const x=await db.rpc('save_scores',{p_sheet:sid,p_rows:rows});
+if(x.error){setSv('Not saved','x');msg('m',friendly(x.error));clearTimeout(retry);retry=setTimeout(flush,6000);return}
+msg('m','');rows.forEach(r=>dirty.delete(r.student_id));setSv(dirty.size?'Saving…':'Saved','')});return inflight}
+if(editable){window.onbeforeunload=()=>dirty.size?'You have unsaved scores.':undefined;
+$('tb')&&0;document.querySelector('.sheet tbody').addEventListener('input',e=>{const t=e.target;if(!t.dataset.k)return;const id=t.closest('tr').dataset.s;M[id][t.dataset.k]=t.value.trim();dirty.add(id);calc();setSv('Saving…','p');clearTimeout(timer);timer=setTimeout(flush,800)});
+$('sb').onclick=async()=>{const k=calc();if(k.anyBad||k.done!==stu.length)return;if(!confirm('Submit these scores for review? You will not be able to edit them unless they are returned.'))return;
+busy($('sb'),true,'Submit for review');await flush();if(dirty.size){busy($('sb'),false,'Submit for review');return msg('m','Some scores are not saved yet. Wait for "Saved" and try again.')}
+const x=await db.rpc('submit_sheet',{p_sheet:sid});if(x.error){busy($('sb'),false,'Submit for review');return msg('m',friendly(x.error))}window.onbeforeunload=null;teacherSheet(c,term,a,label,'Submitted for review.')}}
+calc()}
 
 (async function start(){
 if(!db){view(`<div class="err">The app could not load its connection library. Check your internet and reload.</div>`);return}
