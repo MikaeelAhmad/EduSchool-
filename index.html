@@ -31,11 +31,17 @@ fieldset{border:1px solid var(--line);border-radius:10px;margin:10px 0;padding:8
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0}.chip{background:var(--soft);color:var(--navy);border-radius:99px;padding:2px 10px;font-size:13px}
 textarea{width:100%;min-height:110px;font-size:16px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font-family:inherit}textarea:focus{outline:2px solid var(--teal)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+table{border-collapse:collapse;width:100%}th,td{padding:6px;border-bottom:1px solid var(--line);font-size:14px;text-align:left;vertical-align:top}th{background:var(--soft);color:var(--navy)}
+.wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}td input,td select{height:40px;font-size:15px;padding:0 8px}
+.bad{color:var(--bad);font-size:13px}.wn{color:#8a5a00;font-size:13px}.okc{color:var(--teal);font-size:13px}.x{width:40px;height:40px;border:1px solid var(--line);background:var(--card);color:var(--bad);border-radius:8px;font-size:18px;cursor:pointer;padding:0}
+.tabs{display:flex;gap:6px;margin:8px 0}.tab{flex:1;height:44px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text);font-size:15px;font-weight:600;cursor:pointer}.tab[aria-pressed=true]{background:var(--navy);color:var(--onnavy);border-color:var(--navy)}
+.sum{display:flex;gap:12px;flex-wrap:wrap;font-size:14px;margin:6px 0 10px}
 footer{padding:12px;text-align:center;font-size:12px;opacity:.75;border-top:1px solid var(--line);background:var(--card)}
 </style></head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#15345B"/><path d="M13 23Q23 18 32 24V47Q23 41 13 45Z" fill="#fff"/><path d="M51 23Q41 18 32 24V47Q41 41 51 45Z" fill="#159A8A"/><circle cx="32" cy="13" r="3.5" fill="#E8B44C"/></symbol></defs></svg>
 <div id="bar"></div><main id="app"><p class="center muted">Loading…</p></main>
 <footer>EduSchool Management · Simplifying School Management.<br>Developed by EduResearch Hub</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 // Public values only. The publishable key is safe in the browser; Row Level Security protects the data.
@@ -102,13 +108,13 @@ const wireOut=()=>{$('out').onclick=async()=>{await db.auth.signOut();login()}};
 async function home(){
 const{data:u}=await db.auth.getUser();const user=u&&u.user;if(!user)return login();
 const{data:prof}=await db.from('profiles').select('full_name,is_super_admin').eq('id',user.id).maybeSingle();
-const{data:mem,error:me}=await db.from('school_members').select('role,school_id,schools(name,status)').eq('user_id',user.id).eq('active',true);
+const{data:mem,error:me}=await db.from('school_members').select('role,school_id,schools(name,status,ownership,levels)').eq('user_id',user.id).eq('active',true);
 if(me)return view(`<div class="err">Could not load your account: ${esc(me.message)}</div>`);
 const name=(prof&&prof.full_name)||user.email;
 if(prof&&prof.is_super_admin)return superAdmin(name);
 if(!mem||!mem.length)return noSchool(name);
 const m=mem[0],s=m.schools||{};
-if(m.role==='school_admin'&&s.status==='active')return adminHome({sid:m.school_id,name:s.name,uname:name});
+if(m.role==='school_admin'&&s.status==='active')return adminHome({sid:m.school_id,name:s.name,uname:name,levels:s.levels||['nursery','primary'],ownership:s.ownership||'private'});
 view(`<h1>${esc(ROLE[m.role]||m.role)} portal</h1><p class="muted" style="margin:0 0 10px">${esc(name)} · ${esc(s.name||'')}</p>
 ${s.status==='active'?`<div class="ok">Your school is active. Features for your role are being connected step by step.</div>`:`<div class="warn"><b>Waiting for approval.</b> Your school is ${esc(s.status||'pending')}. The platform owner must activate it before you can use it.</div>`}
 <div class="card"><p class="muted" style="margin:0">Signed in securely. Next phases connect students, scores, results and report cards to this account.</p></div>`,
@@ -116,21 +122,28 @@ barHtml(s.name||'EduSchool',ROLE[m.role]||m.role));wireOut()}
 
 function noSchool(name){view(`<h1>Welcome, ${esc(name)}</h1>
 <div class="card"><h2 style="margin-top:0">Register your school</h2><p class="muted" style="margin:0">You will become the School Admin. The platform owner approves new schools.</p>
-<label for="sn">School name</label><input id="sn"><label for="st">School type</label><select id="st"><option value="nursery">Nursery</option><option value="primary" selected>Primary</option><option value="secondary">Secondary</option><option value="nursery_primary">Nursery and Primary</option><option value="primary_secondary">Primary and Secondary</option><option value="all_levels">Nursery, Primary and Secondary</option></select>
+<label for="sn">School name</label><input id="sn">
+<label for="so">Type of school</label><select id="so"><option value="private">Private school</option><option value="public">Public (government) school</option></select>
+<label for="sty">What does your school run?</label><select id="sty"><option value="nps">Nursery and Primary only</option><option value="all">Nursery, Primary and Secondary</option><option value="sec">Secondary only (Junior and Senior)</option><option value="custom">Other (choose levels)</option></select>
+<div id="cu" hidden><fieldset><legend>Levels</legend>${[['nursery','Nursery'],['primary','Primary'],['jss','Junior Secondary'],['sss','Senior Secondary']].map(l=>`<label class="chk"><input type="checkbox" class="lv" value="${l[0]}"> ${l[1]}</label>`).join('')}</fieldset></div>
 <label for="sa">Address</label><input id="sa"><label for="sp">School phone</label><input id="sp" inputmode="tel"><label for="se">School email</label><input id="se" type="email">
 <div id="m" class="err" hidden role="alert"></div><button class="b" id="go">Register school</button></div>
-<div class="card"><p class="muted" style="margin:0">Teacher or parent? Your school adds you. Ask the school administrator to add this email address.</p></div>`,barHtml('EduSchool','Account'));wireOut();
-$('go').onclick=async()=>{const n=$('sn').value.trim();if(!n)return msg('m','Enter the school name.');busy($('go'),true,'Register school');
-const{error}=await db.rpc('register_school',{p_name:n,p_type:$('st').value,p_address:$('sa').value.trim()||null,p_phone:$('sp').value.trim()||null,p_email:$('se').value.trim()||null});
+<div class="card"><p class="muted" style="margin:0">Teacher, head or parent? Your school adds you. Ask the school administrator to add this email address.</p></div>`,barHtml('EduSchool','Account'));wireOut();
+$('sty').onchange=()=>{$('cu').hidden=$('sty').value!=='custom'};
+$('go').onclick=async()=>{const n=$('sn').value.trim();if(!n)return msg('m','Enter the school name.');
+const P={nps:['nursery','primary'],all:['nursery','primary','jss','sss'],sec:['jss','sss']};
+const lv=$('sty').value==='custom'?[...document.querySelectorAll('.lv')].filter(x=>x.checked).map(x=>x.value):P[$('sty').value];
+if(!lv.length)return msg('m','Tick at least one level.');busy($('go'),true,'Register school');
+const{error}=await db.rpc('register_school',{p_name:n,p_ownership:$('so').value,p_levels:lv,p_address:$('sa').value.trim()||null,p_phone:$('sp').value.trim()||null,p_email:$('se').value.trim()||null});
 busy($('go'),false,'Register school');if(error)return msg('m',friendly(error));home()}}
 
 async function superAdmin(name){
-const{data:L,error}=await db.from('schools').select('id,name,school_type,status,created_at').order('created_at',{ascending:false});
+const{data:L,error}=await db.from('schools').select('id,name,school_type,status,created_at,ownership,levels').order('created_at',{ascending:false});
 if(error)return view(`<div class="err">Could not load schools: ${esc(error.message)}</div>`);
 const c=s=>L.filter(x=>x.status===s).length;
 view(`<h1>Platform overview</h1><p class="muted" style="margin:0 0 10px">${esc(name)} · Super Admin</p>
 <div class="card"><b>${L.length}</b> schools · <b>${c('pending')}</b> waiting · <b>${c('active')}</b> active · <b>${c('suspended')}</b> suspended</div>
-<h2>Schools</h2><div class="card">${L.length?L.map(s=>`<div class="sch"><div><b>${esc(s.name)}</b><div class="muted">${esc(s.school_type)} · ${new Date(s.created_at).toLocaleDateString()}</div></div>
+<h2>Schools</h2><div class="card">${L.length?L.map(s=>`<div class="sch"><div><b>${esc(s.name)}</b><div class="muted">${s.ownership==='public'?'Public':'Private'} · ${esc(structLabel(s.levels))} · ${new Date(s.created_at).toLocaleDateString()}</div></div>
 <div style="display:flex;gap:6px;align-items:center"><span class="pill ${s.status==='active'?'':s.status==='pending'?'p':'x'}">${esc(s.status)}</span>
 ${s.status!=='active'?`<button class="s" data-id="${s.id}" data-st="active">Activate</button>`:`<button class="s" data-id="${s.id}" data-st="suspended">Suspend</button>`}</div></div>`).join(''):'<p class="muted" style="margin:0">No schools registered yet.</p>'}</div>
 <div id="m" class="err" hidden role="alert"></div>`,barHtml('EduSchool Management','Super Admin'));wireOut();
@@ -150,11 +163,12 @@ const menu=(id,t,sub)=>`<button class="menu" id="${id}"><span><b>${t}</b><small>
 async function count(t,sid){const r=await db.from(t).select('id',{count:'exact',head:true}).eq('school_id',sid);return r.count||0}
 async function adminHome(c){
 const[cl,sc,su,st]=await Promise.all(['classes','sections','subjects','students'].map(t=>count(t,c.sid)));
-view(`<h1>School Admin portal</h1><p class="muted" style="margin:0 0 10px">${esc(c.uname)} · ${esc(c.name)}</p>
+view(`<h1>School Admin portal</h1><p class="muted" style="margin:0 0 10px">${esc(c.uname)} · ${esc(c.name)}<br>${c.ownership==='public'?'Public':'Private'} school · ${esc(structLabel(c.levels))}</p>
 <div class="card"><b>${cl}</b> classes · <b>${sc}</b> class arms · <b>${su}</b> subjects · <b>${st}</b> students</div>
 ${menu('gs','Set up school','Session, classes, class arms and subjects')}
-<div class="card"><p class="muted" style="margin:0">Next steps being connected: add students, assign teachers, scores and report cards.</p></div>`,barHtml(c.name,'School Admin'));wireOut();
-$('gs').onclick=()=>setup(c)}
+${menu('ge','Add students','Paste a list or upload Excel/CSV')}${menu('gl','Students','Search and view enrolled students')}${menu('gt','Staff and leadership','Heads, principals, teachers, exam officers')}
+<div class="card"><p class="muted" style="margin:0">Next steps being connected: assign teachers, scores, result approval and report cards.</p></div>`,barHtml(c.name,'School Admin'));wireOut();
+$('gs').onclick=()=>setup(c);$('ge').onclick=()=>enrol(c);$('gl').onclick=()=>studentList(c);$('gt').onclick=()=>staff(c)}
 
 async function setup(c,note){
 const[ses,cls,sec,sub]=await Promise.all([
@@ -172,7 +186,7 @@ view(`<button class="l" id="bk">← Back</button><h1>Set up school</h1>${note?`<
 ${cur?`<p style="margin:0 0 8px"><b>${esc(cur.name)}</b> <span class="pill">current</span><br><span class="muted">Terms 1, 2 and 3 are set up.</span></p>`:'<p class="muted" style="margin:0 0 8px">No session yet.</p>'}
 <label for="ns">${cur?'Start a new session':'Session'}: type the starting year (example 2026)</label><input id="ns" inputmode="numeric" placeholder="2026"><p class="muted" id="sp" style="margin:4px 0 0"></p><button class="b" id="cs">Create session</button></div>
 <div class="card"><h2 style="margin-top:0">2. Classes</h2><p class="muted" style="margin:0">Tick the classes your school has. Choose the class arms below.</p>
-${LEVELS.map(l=>`<fieldset><legend>${l[0]}</legend>${l[2].map(n=>`<label class="chk"><input type="checkbox" class="cls" value="${n}" ${have.has(n)?'checked disabled':''}> ${n}</label>`).join('')}</fieldset>`).join('')}
+${LEVELS.filter(l=>(c.levels||[]).includes(l[1])).map(l=>`<fieldset><legend>${l[0]}</legend>${l[2].map(n=>`<label class="chk"><input type="checkbox" class="cls" value="${n}" ${have.has(n)?'checked disabled':''}> ${n}</label>`).join('')}</fieldset>`).join('')}
 <fieldset><legend>Class arms for the new classes</legend>${['A','B','C','D','E'].map(a=>`<label class="chk"><input type="checkbox" class="arm" value="${a}" ${a==='A'?'checked':''}> Arm ${a}</label>`).join('')}</fieldset><button class="b" id="ac">Add ticked classes</button></div>
 <div class="card"><h2 style="margin-top:0">3. Class arms</h2>
 ${classes.length?classes.map(x=>`<div style="margin-bottom:6px"><b>${esc(x.name)}</b><div class="chips">${sec.data.filter(y=>y.class_id===x.id).map(y=>`<span class="chip">${esc(y.name)}</span>`).sort().join('')||'<span class="muted">no arms</span>'}</div></div>`).join(''):'<p class="muted" style="margin:0">Add classes first.</p>'}
@@ -209,6 +223,179 @@ const names=[...new Set($('sb').value.split(/[\n,]/).map(x=>x.trim().replace(/\s
 if(!names.length)return msg('m','Write at least one new subject.');busy($('asb'),true,'Add subjects');
 const r=await db.from('subjects').insert(names.map(n=>({school_id:c.sid,name:n})));
 if(r.error){busy($('asb'),false,'Add subjects');return msg('m',dupMsg(r.error))}setup(c,`${names.length} subject${names.length>1?'s':''} added.`)}}
+
+
+// ===== Student list parser (same code as the tested parseStudents module) =====
+// Turns pasted/uploaded student lists into records. Pure functions, no DOM.
+const GENDER = { m: 'Male', male: 'Male', boy: 'Male', f: 'Female', female: 'Female', girl: 'Female' };
+const HEAD = { name: /^(full\s*)?name|student|pupil/i, adm: /adm|reg|number|^no\.?$|^id$/i, gender: /gender|sex/i };
+
+function splitCsvLine(line, d) {
+  const out = []; let cur = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+    else if (ch === d && !q) { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur); return out.map((x) => x.trim());
+}
+const titleCase = (s) => (s === s.toUpperCase() ? s.toLowerCase().replace(/(^|[\s-])([a-z])/g, (m, a, b) => a + b.toUpperCase()) : s);
+const isPunct = (t) => /^[-–—|:;,.\/]+$/.test(t);
+
+function delimiter(line) { for (const d of ['\t', '|', ';', ',']) if (line.includes(d)) return d; return null; }
+
+function parseStudents(text) {
+  const lines = String(text).replace(/\r/g, '').split('\n').map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return [];
+  const d0 = delimiter(lines[0]);
+  let map = null, start = 0;
+  if (d0) {
+    const cells = splitCsvLine(lines[0], d0);
+    const m = {};
+    cells.forEach((c, i) => { for (const k of ['gender', 'adm', 'name']) if (m[k] === undefined && HEAD[k].test(c) && !/\d/.test(c)) { m[k] = i; break; } });
+    if (m.name !== undefined && (m.adm !== undefined || m.gender !== undefined)) { map = m; start = 1; }
+  }
+  return lines.slice(start).map((raw) => {
+    const line = raw.replace(/^\d+\s*[.)\-]\s+/, '');
+    const d = delimiter(line);
+    const cells = d ? splitCsvLine(line, d) : line.split(/\s+/);
+    let name = '', adm = '', gender = '';
+    if (map && d) {
+      name = cells[map.name] || ''; adm = cells[map.adm] || ''; gender = GENDER[(cells[map.gender] || '').toLowerCase()] || '';
+    } else {
+      const parts = [];
+      for (const c of cells.flatMap((x) => (d ? x.split(/\s+/) : [x]))) {
+        if (!c || isPunct(c)) continue;
+        const g = GENDER[c.toLowerCase().replace(/[.,]/g, '')];
+        if (g && !gender) gender = g;
+        else if (/\d/.test(c)) { if (!adm) adm = c; }
+        else parts.push(c);
+      }
+      name = parts.join(' ');
+    }
+    name = titleCase(name.replace(/\s+/g, ' ').trim());
+    return { name, adm: adm.trim(), gender };
+  });
+}
+
+/** Adds issues. blocking = cannot enrol until fixed; warn = allowed but flagged. */
+function flagRecords(records, existingAdms = []) {
+  const seen = new Map();
+  records.forEach((r) => { const a = r.adm.toLowerCase(); if (a) seen.set(a, (seen.get(a) || 0) + 1); });
+  const ex = new Set(existingAdms.map((a) => a.toLowerCase()));
+  return records.map((r) => {
+    const blocking = [], warn = [];
+    if (!r.name) blocking.push('Name missing');
+    if (!r.adm) blocking.push('Admission no. missing');
+    else if (seen.get(r.adm.toLowerCase()) > 1) blocking.push('Duplicate in this list');
+    else if (ex.has(r.adm.toLowerCase())) blocking.push('Already enrolled');
+    if (r.name && r.name.split(' ').length < 2) warn.push('Check name (one word)');
+    if (!r.gender) warn.push('Gender missing');
+    return { ...r, blocking, warn };
+  });
+}
+
+/** Next free admission numbers, zero-padded to the width of the longest existing plain number. */
+function fillAdmissions(records, existingAdms = []) {
+  const used = new Set([...existingAdms, ...records.map((r) => r.adm)].filter(Boolean).map((a) => a.toLowerCase()));
+  let n = 1;
+  return records.map((r) => {
+    if (r.adm) return r;
+    while (used.has(String(n).padStart(3, '0'))) n++;
+    const adm = String(n).padStart(3, '0'); used.add(adm); return { ...r, adm };
+  });
+}
+
+// ===== School Admin: add students and student list =====
+async function secOptions(c){const r=await db.from('sections').select('id,name,classes(name)').eq('school_id',c.sid);if(r.error)return{error:r.error};
+const L=r.data.map(x=>{const cn=x.classes?x.classes.name:'';return{id:x.id,cn,an:x.name,label:cn+' '+x.name}}).sort((a,b)=>ALLC.indexOf(a.cn)-ALLC.indexOf(b.cn)||a.an.localeCompare(b.an));return{data:L}}
+
+async function enrol(c,note){
+const so=await secOptions(c);
+if(so.error)return view(`<div class="err">Could not load classes: ${esc(so.error.message)}</div>`,barHtml(c.name,'School Admin'));
+if(!so.data.length){view(`<button class="l" id="bk">← Back</button><div class="warn">Set up classes and class arms first (School Admin portal → Set up school).</div>`,barHtml(c.name,'School Admin'));wireOut();$('bk').onclick=()=>adminHome(c);return}
+const ar=await db.from('students').select('admission_no').eq('school_id',c.sid).limit(1000);
+const ex=(ar.data||[]).map(x=>x.admission_no);let R=[];
+view(`<button class="l" id="bk">← Back</button><h1>Add students</h1>${note?`<div class="ok">${esc(note)}</div>`:''}<div id="m" class="err" hidden role="alert"></div>
+<div class="card"><label for="sec">Class and arm</label><select id="sec">${so.data.map(x=>`<option value="${x.id}">${esc(x.label)}</option>`).join('')}</select>
+<div class="tabs"><button class="tab" id="tp" aria-pressed="true">Paste list</button><button class="tab" id="tu" aria-pressed="false">Excel / CSV file</button></div>
+<div id="pp"><label for="ta">Paste names (from Excel, WhatsApp, Word or a typed list)</label><textarea id="ta" placeholder="Musa Ibrahim Male 001&#10;Fatima Aliyu Female 002"></textarea><p class="muted" style="margin:4px 0 0">One student per line. Name, gender and admission number in any order.</p><button class="b" id="ck">Check list</button></div>
+<div id="pu" hidden><label for="fi">Choose a .csv, .txt or Excel (.xlsx) file</label><input id="fi" type="file" accept=".csv,.txt,.xlsx,.xls" style="padding-top:11px"></div></div>
+<div class="card" id="pv" hidden><h2 style="margin-top:0">Check and fix</h2><div class="sum" id="sm"></div>
+<div class="wrap"><table style="min-width:600px"><thead><tr><th>Name</th><th>Admission no.</th><th>Gender</th><th>Check</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>
+<button class="s" id="fl" hidden style="width:100%;margin-top:10px">Fill missing admission numbers</button><button class="b" id="en">Enrol students</button><p class="muted" id="eh" style="margin:6px 0 0"></p></div>`,barHtml(c.name,'School Admin'));wireOut();
+$('bk').onclick=()=>adminHome(c);
+const tab=p=>{$('pp').hidden=!p;$('pu').hidden=p;$('tp').setAttribute('aria-pressed',p);$('tu').setAttribute('aria-pressed',!p)};$('tp').onclick=()=>tab(true);$('tu').onclick=()=>tab(false);
+function load(text){R=parseStudents(text);if(!R.length){$('pv').hidden=true;return msg('m','No students found in that list. Check it and try again.')}msg('m','');render()}
+function render(){$('pv').hidden=false;
+$('tb').innerHTML=R.map((r,i)=>`<tr data-i="${i}"><td><input data-k="name" value="${esc(r.name)}" aria-label="Name" style="min-width:150px"></td><td><input data-k="adm" value="${esc(r.adm)}" aria-label="Admission number" style="min-width:90px"></td><td><select data-k="gender" aria-label="Gender"><option value="">–</option><option${r.gender==='Male'?' selected':''}>Male</option><option${r.gender==='Female'?' selected':''}>Female</option></select></td><td class="ck"></td><td><button class="x" data-rm="${i}" aria-label="Remove">×</button></td></tr>`).join('');refresh()}
+function refresh(){const F=flagRecords(R,ex);let bl=0,wn=0,miss=0;
+F.forEach((f,i)=>{const td=document.querySelector(`tr[data-i="${i}"] .ck`);if(!td)return;if(f.blocking.length)bl++;if(f.warn.length)wn++;if(!f.adm)miss++;
+td.innerHTML=f.blocking.map(x=>`<div class="bad">${x}</div>`).join('')+f.warn.map(x=>`<div class="wn">${x}</div>`).join('')||'<span class="okc">OK</span>'});
+$('sm').innerHTML=`<span><b>${R.length}</b> students</span><span><b>${bl}</b> to fix</span><span><b>${wn}</b> to check</span>`;
+$('fl').hidden=!miss;$('en').disabled=!R.length||bl>0;$('en').textContent=`Enrol ${R.length} student${R.length===1?'':'s'}`;$('eh').textContent=bl?'Fix the red items first.':''}
+$('ck').onclick=()=>load($('ta').value);
+$('fi').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();
+if(/\.xlsx?$/i.test(f.name)){if(typeof XLSX==='undefined')return msg('m','Excel reading did not load. Save the sheet as CSV, or copy the cells and paste them.');
+rd.onload=()=>{try{const wb=XLSX.read(rd.result,{type:'array'});load(XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]))}catch(x){msg('m','Could not read that Excel file.')}};rd.readAsArrayBuffer(f)}
+else{rd.onload=()=>load(rd.result);rd.readAsText(f)}};
+$('tb').addEventListener('input',e=>{const t=e.target,tr=t.closest('tr');if(!tr)return;R[+tr.dataset.i][t.dataset.k]=t.value.trim();refresh()});
+$('tb').addEventListener('click',e=>{const b=e.target.closest('[data-rm]');if(!b)return;R.splice(+b.dataset.rm,1);R.length?render():($('pv').hidden=true)});
+$('fl').onclick=()=>{R=fillAdmissions(R,ex);render()};
+$('en').onclick=async()=>{const sid=$('sec').value,label=so.data.find(x=>x.id===sid).label;
+const rows=R.map(r=>({school_id:c.sid,section_id:sid,admission_no:r.adm,full_name:r.name,gender:r.gender||null}));
+busy($('en'),true);let done=0;
+for(let i=0;i<rows.length;i+=200){const x=await db.from('students').insert(rows.slice(i,i+200));
+if(x.error){busy($('en'),false);const dup=/duplicate|unique/i.test(x.error.message||'');return enrol(c,null).then(()=>msg('m',(done?`${done} students were saved. `:'')+(dup?'Some admission numbers already exist in this school. Reload and check the list again.':friendly(x.error))))}
+done+=Math.min(200,rows.length-i)}
+enrol(c,`${done} student${done===1?'':'s'} enrolled in ${label}.`)}}
+
+async function studentList(c){
+const so=await secOptions(c);if(so.error)return view(`<div class="err">${esc(so.error.message)}</div>`,barHtml(c.name,'School Admin'));
+view(`<button class="l" id="bk">← Back</button><h1>Students</h1><div class="card"><div class="two"><div><label for="fs">Class and arm</label><select id="fs"><option value="">All</option>${so.data.map(x=>`<option value="${x.id}">${esc(x.label)}</option>`).join('')}</select></div><div><label for="q">Search</label><input id="q" placeholder="Name or admission no."></div></div></div>
+<p class="muted" id="cnt"></p><div class="wrap" id="lw"></div>`,barHtml(c.name,'School Admin'));wireOut();$('bk').onclick=()=>adminHome(c);
+let t;async function load(){const q=$('q').value.trim().replace(/[,()%*]/g,' ');
+let r=db.from('students').select('admission_no,full_name,gender,status,sections(name,classes(name))').eq('school_id',c.sid);
+if($('fs').value)r=r.eq('section_id',$('fs').value);if(q)r=r.or(`full_name.ilike.%${q}%,admission_no.ilike.%${q}%`);
+const x=await r.order('full_name').limit(200);
+if(x.error){$('lw').innerHTML=`<div class="err">${esc(x.error.message)}</div>`;return}
+$('cnt').textContent=x.data.length>=200?'Showing the first 200. Use search or pick a class.':`${x.data.length} student${x.data.length===1?'':'s'}`;
+$('lw').innerHTML=x.data.length?`<table style="min-width:420px"><thead><tr><th>Name</th><th>Adm. no.</th><th>Class</th><th>Gender</th></tr></thead><tbody>${x.data.map(s=>`<tr><td>${esc(s.full_name)}</td><td>${esc(s.admission_no)}</td><td>${esc(s.sections&&s.sections.classes?s.sections.classes.name+' '+s.sections.name:'')}</td><td>${esc(s.gender||'')}</td></tr>`).join('')}</tbody></table>`:'<p class="muted" style="padding:10px;margin:0">No students found.</p>'}
+$('fs').onchange=load;$('q').oninput=()=>{clearTimeout(t);t=setTimeout(load,350)};load()}
+
+
+// ===== School structure labels and staff =====
+const LVN={nursery:'Nursery',primary:'Primary',jss:'Junior Secondary',sss:'Senior Secondary'};
+function structLabel(lv){lv=lv||[];const o=['nursery','primary','jss','sss'].filter(x=>lv.includes(x)),k=o.join();
+return({'nursery,primary':'Nursery and Primary','nursery,primary,jss,sss':'Nursery, Primary and Secondary','jss,sss':'Secondary (Junior and Senior)'})[k]||o.map(x=>LVN[x]).join(', ')}
+const scopeText=sc=>(!sc||!sc.length)?'Whole school':sc.map(x=>LVN[x]).join(' + ');
+const LEAD=['headmaster','headmistress','principal','vice_principal','exam_officer'];
+async function staff(c,note){
+const r=await db.from('school_members').select('id,role,level_scope,profiles(full_name)').eq('school_id',c.sid).eq('active',true);
+if(r.error)return view(`<div class="err">Could not load staff: ${esc(r.error.message)}</div>`,barHtml(c.name,'School Admin'));
+const lv=c.levels||[],np=['nursery','primary'].filter(x=>lv.includes(x)),sc=[['all','Whole school',null]];
+if(np.length)sc.push(['np',np.map(x=>LVN[x]).join(' and ')+' section',np]);
+if(lv.includes('jss'))sc.push(['jss','Junior Secondary section',['jss']]);
+if(lv.includes('sss'))sc.push(['sss','Senior Secondary section',['sss']]);
+const groups=sc.length-1,tip=lv.includes('primary')||lv.includes('nursery')?(lv.includes('jss')||lv.includes('sss')?'The Nursery/Primary section usually has a Headmaster or Headmistress. Each secondary section can have its own Principal, or one Principal can lead the whole school.':'The head of a Nursery/Primary school is usually a Headmaster or Headmistress.'):'A Principal can lead the whole school, or you can give Junior and Senior Secondary a Principal each.';
+const order=['school_admin','headmaster','headmistress','principal','vice_principal','exam_officer','teacher'];
+const L=[...r.data].sort((a,b)=>order.indexOf(a.role)-order.indexOf(b.role));
+view(`<button class="l" id="bk">← Back</button><h1>Staff and leadership</h1>${note?`<div class="ok">${esc(note)}</div>`:''}<div id="m" class="err" hidden role="alert"></div>
+<div class="card"><h2 style="margin-top:0">Current staff</h2>${L.map(x=>`<div class="sch"><div><b>${esc((x.profiles&&x.profiles.full_name)||'Name hidden')}</b><div class="muted">${esc(ROLE[x.role]||x.role)}${x.role==='school_admin'?'':' · '+esc(scopeText(x.level_scope))}</div></div>${x.role==='school_admin'?'':`<button class="s" data-rm="${x.id}" style="height:40px;font-size:14px">Remove</button>`}</div>`).join('')||'<p class="muted" style="margin:0">No staff yet.</p>'}</div>
+<div class="card"><h2 style="margin-top:0">Add a staff member</h2><p class="muted" style="margin:0">The person must first create an account on this app with their own email. Then add them here.</p>
+<label for="se">Their email</label><input id="se" type="email" inputmode="email" autocomplete="off">
+<label for="sr">Role</label><select id="sr"><option value="headmaster">Headmaster</option><option value="headmistress">Headmistress</option><option value="principal">Principal</option><option value="vice_principal">Vice Principal</option><option value="exam_officer">Examination Officer</option><option value="teacher">Teacher</option></select>
+<div id="sw" ${groups>=2?'':'hidden'}><label for="ss">Which part of the school</label><select id="ss">${sc.map(x=>`<option value="${x[0]}">${esc(x[1])}</option>`).join('')}</select></div>
+<p class="muted" style="margin:6px 0 0">${esc(tip)}</p><button class="b" id="add">Add to school</button></div>`,barHtml(c.name,'School Admin'));wireOut();
+$('bk').onclick=()=>adminHome(c);
+$('sr').onchange=()=>{$('sw').hidden=!(groups>=2&&LEAD.includes($('sr').value))};$('sr').onchange();
+document.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this person from the school?'))return;
+b.disabled=true;const x=await db.from('school_members').update({active:false}).eq('id',b.dataset.rm);if(x.error){b.disabled=false;return msg('m',friendly(x.error))}staff(c,'Removed.')});
+$('add').onclick=async()=>{const e=$('se').value.trim(),role=$('sr').value;if(!/^\S+@\S+\.\S+$/.test(e))return msg('m','Enter a valid email address.');
+let scope=null;if(groups>=2&&LEAD.includes(role)){const o=sc.find(x=>x[0]===$('ss').value);scope=o&&o[2]?o[2]:null}
+busy($('add'),true,'Add to school');const x=await db.rpc('add_school_member',{p_school:c.sid,p_email:e,p_role:role,p_scope:scope});
+busy($('add'),false,'Add to school');if(x.error)return msg('m',friendly(x.error));staff(c,`${x.data||'Staff member'} added as ${ROLE[role]}.`)}}
 
 (async function start(){
 if(!db){view(`<div class="err">The app could not load its connection library. Check your internet and reload.</div>`);return}
