@@ -118,6 +118,7 @@ const name=(prof&&prof.full_name)||user.email;
 if(prof&&prof.is_super_admin)return superAdmin(name);
 if(!mem||!mem.length)return noSchool(name);
 const m=mem[0],s=m.schools||{};
+if(m.role==='exam_officer'&&s.status==='active')return examHome({sid:m.school_id,name:s.name,uname:name,uid:user.id});
 if(m.role==='teacher'&&s.status==='active')return teacherHome({sid:m.school_id,name:s.name,uname:name,uid:user.id});
 if(m.role==='school_admin'&&s.status==='active')return adminHome({sid:m.school_id,name:s.name,uname:name,levels:s.levels||['nursery','primary'],ownership:s.ownership||'private'});
 view(`<h1>${esc(ROLE[m.role]||m.role)} portal</h1><p class="muted" style="margin:0 0 10px">${esc(name)} · ${esc(s.name||'')}</p>
@@ -171,9 +172,9 @@ const[cl,sc,su,st]=await Promise.all(['classes','sections','subjects','students'
 view(`<h1>School Admin portal</h1><p class="muted" style="margin:0 0 10px">${esc(c.uname)} · ${esc(c.name)}<br>${c.ownership==='public'?'Public':'Private'} school · ${esc(structLabel(c.levels))}</p>
 <div class="card"><b>${cl}</b> classes · <b>${sc}</b> class arms · <b>${su}</b> subjects · <b>${st}</b> students</div>
 ${menu('gs','Set up school','Session, classes, class arms and subjects')}
-${menu('ge','Add students','Paste a list or upload Excel/CSV')}${menu('gl','Students','Search and view enrolled students')}${menu('gt','Staff and leadership','Heads, principals, teachers, exam officers')}${menu('gk','Assign teachers','Give teachers their classes and subjects')}
-<div class="card"><p class="muted" style="margin:0">Next steps being connected: assign teachers, scores, result approval and report cards.</p></div>`,barHtml(c.name,'School Admin'));wireOut();
-$('gs').onclick=()=>setup(c);$('ge').onclick=()=>enrol(c);$('gl').onclick=()=>studentList(c);$('gt').onclick=()=>staff(c);$('gk').onclick=()=>assign(c)}
+${menu('ge','Add students','Paste a list or upload Excel/CSV')}${menu('gl','Students','Search and view enrolled students')}${menu('gt','Staff and leadership','Heads, principals, teachers, exam officers')}${menu('gk','Assign teachers','Give teachers their classes and subjects')}${menu('gr','Review results','Approve, return or publish score sheets')}
+<div class="card"><p class="muted" style="margin:0">Next steps being connected: report cards and parent access.</p></div>`,barHtml(c.name,'School Admin'));wireOut();
+$('gs').onclick=()=>setup(c);$('ge').onclick=()=>enrol(c);$('gl').onclick=()=>studentList(c);$('gt').onclick=()=>staff(c);$('gk').onclick=()=>assign(c);$('gr').onclick=()=>examHome(c)}
 
 async function setup(c,note){
 const[ses,cls,sec,sub]=await Promise.all([
@@ -509,6 +510,58 @@ $('sb').onclick=async()=>{const k=calc();if(k.anyBad||k.done!==stu.length)return
 busy($('sb'),true,'Submit for review');await flush();if(dirty.size){busy($('sb'),false,'Submit for review');return msg('m','Some scores are not saved yet. Wait for "Saved" and try again.')}
 const x=await db.rpc('submit_sheet',{p_sheet:sid});if(x.error){busy($('sb'),false,'Submit for review');return msg('m',friendly(x.error))}window.onbeforeunload=null;teacherSheet(c,term,a,label,'Submitted for review.')}}
 calc()}
+
+
+// ===== Examination Officer: review score sheets =====
+async function getTerm(sid){const r=await db.from('terms').select('id,name,closed,academic_sessions(name,is_current)').eq('school_id',sid).eq('closed',false);
+if(r.error)return{error:r.error};const t=(r.data||[]).filter(x=>x.academic_sessions&&x.academic_sessions.is_current).sort((a,b)=>a.name.localeCompare(b.name))[0];return{term:t||null}}
+const GRP={all:['All',()=>true],review:['To review',r=>['submitted','under_review'].includes(r.status)],returned:['Returned',r=>r.status==='returned'],approved:['Approved',r=>r.status==='approved'],published:['Published',r=>r.status==='published'],none:['Not submitted',r=>['none','draft'].includes(r.status)]};
+async function examHome(c,filter,note){filter=filter||'all';
+const bar=barHtml(c.name,c.role||'Review');const g=await getTerm(c.sid);
+if(g.error)return view(`<div class="err">${esc(g.error.message)}</div>`,bar);
+if(!g.term){view(`<h1>Review results</h1><div class="warn">No current term yet. The School Admin must set up the session and terms.</div>`,bar);wireOut();return}
+const[sh,as]=await Promise.all([db.from('score_sheets').select('id,section_id,subject_id,status,review_note').eq('term_id',g.term.id),
+db.from('teacher_assignments').select('section_id,subject_id,profiles(full_name),sections(name,classes(name)),subjects(name)').eq('school_id',c.sid)]);
+const bad=[sh,as].find(x=>x.error);if(bad)return view(`<div class="err">Could not load: ${esc(bad.error.message)}</div>`,bar);
+const rows=(as.data||[]).map(a=>{const s=(sh.data||[]).find(x=>x.section_id===a.section_id&&x.subject_id===a.subject_id);
+return{a,s,status:s?s.status:'none',label:(a.sections&&a.sections.classes?a.sections.classes.name+' '+a.sections.name:'Class')+' · '+(a.subjects?a.subjects.name:'Subject'),teacher:(a.profiles&&a.profiles.full_name)||'Teacher'}}).sort((x,y)=>x.label.localeCompare(y.label));
+const cnt=k=>rows.filter(GRP[k][1]).length,list=rows.filter(GRP[filter][1]);
+view(`<h1>Review results</h1><p class="muted" style="margin:0 0 8px">${esc(g.term.academic_sessions.name)} · ${esc(g.term.name)}</p>${note?`<div class="ok">${esc(note)}</div>`:''}
+<div class="card"><b>${cnt('review')}</b> to review · <b>${cnt('returned')}</b> returned · <b>${cnt('approved')}</b> approved · <b>${cnt('published')}</b> published · <b>${cnt('none')}</b> not submitted</div>
+<div class="chips" style="margin-bottom:8px">${Object.entries(GRP).map(([k,v])=>`<button class="tab" data-f="${k}" aria-pressed="${filter===k}" style="flex:none;padding:0 12px;height:40px">${v[0]}</button>`).join('')}</div>
+${list.length?list.map(r=>{const p=SHEET_ST[r.status==='none'?'draft':r.status];return`<button class="menu" data-i="${rows.indexOf(r)}"><span><b>${esc(r.label)}</b><small>${esc(r.teacher)}</small></span><span class="pill ${p[1]}">${r.status==='none'?'Not started':p[0]}</span></button>`}).join(''):'<p class="muted">Nothing here.</p>'}
+<div class="card"><p class="muted" style="margin:0">Only teacher assignments appear here. Assign teachers first (School Admin → Assign teachers).</p></div>`,bar);wireOut();
+document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>examHome(c,b.dataset.f));
+document.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>examSheet(c,g.term,rows[+b.dataset.i],filter))}
+
+async function examSheet(c,term,r,filter){
+const bar=barHtml(c.name,c.role||'Review'),back=`<button class="l" id="bk">← All sheets</button>`,out=(h)=>{view(back+h,bar);wireOut();$('bk').onclick=()=>examHome(c,filter)};
+if(!r.s)return out(`<h1>${esc(r.label)}</h1><div class="warn">${esc(r.teacher)} has not opened this score sheet yet.</div>`);
+let st=r.status;
+if(st==='submitted'){const x=await db.rpc('review_sheet',{p_sheet:r.s.id,p_status:'under_review',p_note:null});if(!x.error)st='under_review'}
+const id=r.s.id,[cm,gb,stu,en,fresh]=await Promise.all([db.from('assessment_components').select('key,name,max_score').eq('school_id',c.sid).order('sort'),
+db.from('grade_bands').select('min_score,grade').eq('school_id',c.sid),
+db.from('students').select('id,admission_no,full_name').eq('section_id',r.a.section_id).eq('status','enrolled').order('full_name'),
+db.from('score_entries').select('student_id,marks').eq('sheet_id',id),
+db.from('score_sheets').select('review_note').eq('id',id).single()]);
+const e0=[cm,gb,stu,en].find(x=>x.error);if(e0)return out(`<div class="err">${esc(e0.error.message)}</div>`);
+const comps=cm.data||[],bands=gb.data||[],S=stu.data||[],M={};S.forEach(x=>M[x.id]={});(en.data||[]).forEach(x=>{if(M[x.student_id])Object.entries(x.marks||{}).forEach(([k,v])=>{M[x.student_id][k]=String(v)})});
+const R=S.map(x=>rowCalc(comps,M[x.id])),pos=rankPos(R.map(x=>x.total)),ok=R.filter(x=>x.total!==null).map(x=>x.total),miss=S.length-ok.length;
+const avg=ok.length?Math.round(ok.reduce((a,b)=>a+b,0)/ok.length*100)/100:null,hi=ok.length?Math.max(...ok):null,lo=ok.length?Math.min(...ok):null,pr=ok.length?Math.round(ok.filter(x=>x>=40).length/ok.length*100):null;
+const fl=[];if(miss)fl.push(['x',`${miss} student(s) have missing or invalid scores. It cannot be approved.`]);if(avg!==null&&avg<40)fl.push(['',`Class average is ${avg}, below 40. Please check.`]);if(avg!==null&&avg>90)fl.push(['',`Class average is ${avg}, unusually high. Please check.`]);
+const P=SHEET_ST[st],note=fresh.data&&fresh.data.review_note;
+out(`<h1>${esc(r.label)}</h1><p class="muted" style="margin:0 0 6px">${esc(r.teacher)} · ${esc(term.academic_sessions.name)} · ${esc(term.name)} <span class="pill ${P[1]}">${P[0]}</span></p>
+<div class="sum" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0">${[[avg??'–','Average'],[hi??'–','Highest'],[lo??'–','Lowest'],[pr===null?'–':pr+'%','Pass rate'],[ok.length+'/'+S.length,'Complete'],[miss,'Missing']].map(x=>`<div class="card" style="margin:0;text-align:center;padding:8px"><b style="font-size:18px;color:var(--navy)">${x[0]}</b><div class="muted" style="font-size:12px">${x[1]}</div></div>`).join('')}</div>
+${fl.map(f=>`<div class="${f[0]==='x'?'err':'warn'}">${f[1]}</div>`).join('')}${note?`<div class="warn"><b>Last note:</b> ${esc(note)}</div>`:''}
+<div class="wrap"><table class="sheet" style="min-width:${180+comps.length*70}px"><thead><tr><th>Student</th>${comps.map(k=>`<th>${esc(k.name)}<br><small>/${k.max_score}</small></th>`).join('')}<th>Total</th><th>Grade</th><th>Pos.</th></tr></thead><tbody>${S.map((x,i)=>`<tr><td>${esc(x.full_name)}</td>${comps.map(k=>`<td>${esc(M[x.id][k.key]??'–')}</td>`).join('')}<td><b>${R[i].total===null?'–':R[i].total}</b></td><td>${R[i].total===null?'–':gradeOf(R[i].total,bands)}</td><td>${ordn(pos[i])}</td></tr>`).join('')}</tbody></table></div>
+<div class="card" style="margin-top:12px">${['draft','returned'].includes(st)?'<p style="margin:0">Waiting for the teacher to correct and submit.</p>':`<label for="cm">${st==='under_review'?'Comment (required to return)':'Reason (required to reopen)'}</label><textarea id="cm" placeholder="Write here"></textarea>
+<div id="m" class="err" hidden role="alert"></div>${st==='under_review'?`<button class="b" id="ap" ${miss?'disabled':''}>Approve results</button><button class="s" id="rt" style="width:100%;margin-top:8px">Return for correction</button>`:''}${st==='approved'?'<button class="b" id="pb">Publish to parents</button>':''}${['approved','published'].includes(st)?'<button class="s" id="ro" style="width:100%;margin-top:8px">Reopen for review</button>':''}`}</div>`);
+const go=async(status,need,okmsg,confirmText)=>{const n=$('cm')?$('cm').value.trim():'';if(need&&!n)return msg('m',need);if(confirmText&&!confirm(confirmText))return;
+const x=await db.rpc('review_sheet',{p_sheet:id,p_status:status,p_note:n||null});if(x.error)return msg('m',friendly(x.error));examHome(c,filter,okmsg)};
+if($('ap'))$('ap').onclick=()=>go('approved',null,r.label+' approved.','Approve these results?');
+if($('rt'))$('rt').onclick=()=>go('returned','Write a comment so the teacher knows what to correct.',r.label+' returned to the teacher.');
+if($('pb'))$('pb').onclick=()=>go('published',null,r.label+' published.','Publish? Parents will be able to see these results.');
+if($('ro'))$('ro').onclick=()=>go('under_review','Give a reason for reopening. It is saved in the activity log.',r.label+' reopened for review.')}
 
 (async function start(){
 if(!db){view(`<div class="err">The app could not load its connection library. Check your internet and reload.</div>`);return}
