@@ -118,6 +118,7 @@ const name=(prof&&prof.full_name)||user.email;
 if(prof&&prof.is_super_admin)return superAdmin(name);
 if(!mem||!mem.length)return noSchool(name);
 const m=mem[0],s=m.schools||{};
+if(m.role==='parent'&&s.status==='active')return parentHome({uid:user.id,uname:name});
 if(m.role==='exam_officer'&&s.status==='active')return examHome({sid:m.school_id,name:s.name,uname:name,uid:user.id});
 if(m.role==='teacher'&&s.status==='active')return teacherHome({sid:m.school_id,name:s.name,uname:name,uid:user.id});
 if(m.role==='school_admin'&&s.status==='active')return adminHome({sid:m.school_id,name:s.name,uname:name,levels:s.levels||['nursery','primary'],ownership:s.ownership||'private'});
@@ -134,7 +135,9 @@ function noSchool(name){view(`<h1>Welcome, ${esc(name)}</h1>
 <div id="cu" hidden><fieldset><legend>Levels</legend>${[['nursery','Nursery'],['primary','Primary'],['jss','Junior Secondary'],['sss','Senior Secondary']].map(l=>`<label class="chk"><input type="checkbox" class="lv" value="${l[0]}"> ${l[1]}</label>`).join('')}</fieldset></div>
 <label for="sa">Address</label><input id="sa"><label for="sp">School phone</label><input id="sp" inputmode="tel"><label for="se">School email</label><input id="se" type="email">
 <div id="m" class="err" hidden role="alert"></div><button class="b" id="go">Register school</button></div>
-<div class="card"><p class="muted" style="margin:0">Teacher, head or parent? Your school adds you. Ask the school administrator to add this email address.</p></div>`,barHtml('EduSchool','Account'));wireOut();
+<div class="card"><h2 style="margin-top:0">Parent?</h2><p class="muted" style="margin:0">See your child’s published results. The school must confirm you first.</p><button class="b" id="pl">Link my child</button></div>
+<div class="card"><p class="muted" style="margin:0">Teacher or head? Your school adds you. Ask the school administrator to add this email address.</p></div>`,barHtml('EduSchool','Account'));wireOut();
+$('pl').onclick=()=>parentLink(name);
 $('sty').onchange=()=>{$('cu').hidden=$('sty').value!=='custom'};
 $('go').onclick=async()=>{const n=$('sn').value.trim();if(!n)return msg('m','Enter the school name.');
 const P={nps:['nursery','primary'],all:['nursery','primary','jss','sss'],sec:['jss','sss']};
@@ -172,9 +175,9 @@ const[cl,sc,su,st]=await Promise.all(['classes','sections','subjects','students'
 view(`<h1>School Admin portal</h1><p class="muted" style="margin:0 0 10px">${esc(c.uname)} · ${esc(c.name)}<br>${c.ownership==='public'?'Public':'Private'} school · ${esc(structLabel(c.levels))}</p>
 <div class="card"><b>${cl}</b> classes · <b>${sc}</b> class arms · <b>${su}</b> subjects · <b>${st}</b> students</div>
 ${menu('gs','Set up school','Session, classes, class arms and subjects')}
-${menu('ge','Add students','Paste a list or upload Excel/CSV')}${menu('gl','Students','Search and view enrolled students')}${menu('gt','Staff and leadership','Heads, principals, teachers, exam officers')}${menu('gk','Assign teachers','Give teachers their classes and subjects')}${menu('gr','Review results','Approve, return or publish score sheets')}
-<div class="card"><p class="muted" style="margin:0">Next steps being connected: report cards and parent access.</p></div>`,barHtml(c.name,'School Admin'));wireOut();
-$('gs').onclick=()=>setup(c);$('ge').onclick=()=>enrol(c);$('gl').onclick=()=>studentList(c);$('gt').onclick=()=>staff(c);$('gk').onclick=()=>assign(c);$('gr').onclick=()=>examHome(c)}
+${menu('ge','Add students','Paste a list or upload Excel/CSV')}${menu('gl','Students','Search and view enrolled students')}${menu('gt','Staff and leadership','Heads, principals, teachers, exam officers')}${menu('gk','Assign teachers','Give teachers their classes and subjects')}${menu('gr','Review results','Approve, return or publish score sheets')}${menu('gq','Parent requests','Confirm parents and share the school code')}
+<div class="card"><p class="muted" style="margin:0">Next step being connected: report cards.</p></div>`,barHtml(c.name,'School Admin'));wireOut();
+$('gs').onclick=()=>setup(c);$('ge').onclick=()=>enrol(c);$('gl').onclick=()=>studentList(c);$('gt').onclick=()=>staff(c);$('gk').onclick=()=>assign(c);$('gr').onclick=()=>examHome(c);$('gq').onclick=()=>parentRequests(c)}
 
 async function setup(c,note){
 const[ses,cls,sec,sub]=await Promise.all([
@@ -562,6 +565,63 @@ if($('ap'))$('ap').onclick=()=>go('approved',null,r.label+' approved.','Approve 
 if($('rt'))$('rt').onclick=()=>go('returned','Write a comment so the teacher knows what to correct.',r.label+' returned to the teacher.');
 if($('pb'))$('pb').onclick=()=>go('published',null,r.label+' published.','Publish? Parents will be able to see these results.');
 if($('ro'))$('ro').onclick=()=>go('under_review','Give a reason for reopening. It is saved in the activity log.',r.label+' reopened for review.')}
+
+
+// ===== Parent link requests (School Admin) =====
+async function parentRequests(c,note){
+const bar=barHtml(c.name,'School Admin');
+const[sc,rq]=await Promise.all([db.from('schools').select('join_code').eq('id',c.sid).single(),db.rpc('school_guardian_requests',{p_school:c.sid})]);
+const back=`<button class="l" id="bk">← Back</button><h1>Parent requests</h1>`;
+if(rq.error){view(back+`<div class="err">${esc(rq.error.message)}</div><p class="muted">If this says the function does not exist, the database update 0007 has not been run yet.</p>`,bar);wireOut();$('bk').onclick=()=>adminHome(c);return}
+const code=sc.data&&sc.data.join_code,L=rq.data||[];
+view(back+`${note?`<div class="ok">${esc(note)}</div>`:''}<div id="m" class="err" hidden role="alert"></div>
+<div class="card"><b>School code for parents</b><p style="font-size:28px;letter-spacing:3px;margin:6px 0;color:var(--navy);font-weight:700">${esc(code||'—')}</p><p class="muted" style="margin:0">Give this code to parents. They need it with their child’s admission number. You still confirm each request below.</p></div>
+<h2>Waiting for your decision</h2>${L.length?L.map(x=>`<div class="card"><b>${esc(x.parent||'Parent')}</b><div class="muted">Phone ${esc(x.phone)} · Admission no. ${esc(x.adm)}</div>
+<div style="margin:6px 0">${x.student?`Child: <b>${esc(x.student)}</b>${x['class']?' · '+esc(x['class']):''}`:'<span style="color:var(--bad)">No student has this admission number</span>'}</div>
+<div class="two"><button class="s" data-no="${x.id}">Reject</button><button class="b" data-ok="${x.id}" style="margin:0" ${x.student?'':'disabled'}>Approve</button></div></div>`).join(''):'<p class="muted">No requests waiting.</p>'}
+<div class="card"><p class="muted" style="margin:0">Only approve if you know this person is the child’s parent or guardian. Check the phone number against your records.</p></div>`,bar);wireOut();
+$('bk').onclick=()=>adminHome(c);
+const go=async(id,ok)=>{if(ok&&!confirm('Approve this parent for this child?'))return;const x=await db.rpc('decide_guardian',{p_request:id,p_approve:ok});if(x.error)return msg('m',friendly(x.error));parentRequests(c,ok?'Parent approved.':'Request rejected.')};
+document.querySelectorAll('[data-ok]').forEach(b=>b.onclick=()=>go(b.dataset.ok,true));document.querySelectorAll('[data-no]').forEach(b=>b.onclick=()=>go(b.dataset.no,false))}
+
+// ===== Parent portal =====
+function parentLink(name,note,back){
+view(`<button class="l" id="bk">← Back</button><h1>Link your child</h1>${note?`<div class="ok">${esc(note)}</div>`:''}
+<div class="card"><p class="muted" style="margin:0">Ask the school for its <b>school code</b>. Then enter your child’s admission number and your phone number. The school will confirm before you see anything.</p>
+<label for="jc">School code</label><input id="jc" autocomplete="off" autocapitalize="characters" maxlength="10" placeholder="ABC123">
+<label for="ad">Child’s admission number</label><input id="ad" autocomplete="off">
+<label for="ph">Your phone number (the one the school has)</label><input id="ph" inputmode="tel" autocomplete="tel">
+<div id="m" class="err" hidden role="alert"></div><button class="b" id="go">Send request to school</button></div>`,barHtml('EduSchool','Parent'));wireOut();
+$('bk').onclick=()=>back?back():home();
+$('go').onclick=async()=>{const jc=$('jc').value.trim(),ad=$('ad').value.trim(),ph=$('ph').value.trim();
+if(!jc||!ad||!ph)return msg('m','Fill in all three boxes.');busy($('go'),true,'Send request to school');
+const x=await db.rpc('request_child_link',{p_code:jc,p_adm:ad,p_phone:ph});busy($('go'),false,'Send request to school');
+if(x.error)return msg('m',friendly(x.error));parentLink(name,'Request sent. The school will confirm it. Come back later and log in again.',back)}}
+
+const PTOP={1:['#E8B44C','#15345B'],2:['#C5CDD6','#15345B'],3:['#9A5B24','#fff']};
+async function parentHome(c){
+const[ch,rq]=await Promise.all([db.rpc('parent_children'),db.from('guardian_requests').select('id,admission_no,status').eq('parent_id',c.uid).eq('status','pending')]);
+const bar=barHtml('EduSchool','Parent');
+if(ch.error)return view(`<div class="err">${esc(ch.error.message)}</div><p class="muted">If this says the function does not exist, the database update 0007 has not been run yet.</p>`,bar);
+const L=ch.data||[],P=rq.data||[];
+view(`<h1>My children</h1><p class="muted" style="margin:0 0 10px">${esc(c.uname)}</p>
+${L.length?L.map((x,i)=>`<button class="menu" data-i="${i}"><span><b>${esc(x.name)}</b><small>${esc(x.class||'')} · ${esc(x.school)} · Adm. ${esc(x.admission_no)}</small></span><span class="go">Results</span></button>`).join(''):'<div class="warn">No child is linked yet.</div>'}
+${P.map(x=>`<div class="card"><b>Admission no. ${esc(x.admission_no)}</b> <span class="pill p">Waiting for the school</span></div>`).join('')}
+<button class="b" id="pl">Link another child</button>`,bar);wireOut();
+$('pl').onclick=()=>parentLink(c.uname,null,()=>parentHome(c));
+document.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>parentChild(c,L[+b.dataset.i]))}
+
+async function parentChild(c,ch){
+const bar=barHtml('EduSchool','Parent'),r=await db.rpc('parent_results',{p_student:ch.id});
+const head=`<button class="l" id="bk">← My children</button><h1>${esc(ch.name)}</h1><p class="muted" style="margin:0 0 10px">${esc(ch.class||'')} · ${esc(ch.school)}</p>`;
+if(r.error){view(head+`<div class="err">${esc(friendly(r.error))}</div>`,bar);wireOut();$('bk').onclick=()=>parentHome(c);return}
+const T=r.data||[];
+view(head+(T.length?T.map(t=>{const sm=t.summary,tp=sm&&PTOP[sm.position];return`<div class="card"><b style="color:var(--navy)">${esc(t.session)} · ${esc(t.term)}</b>
+${tp?`<div style="background:${tp[0]};color:${tp[1]};border-radius:10px;padding:10px 12px;font-weight:700;margin:8px 0">Top performer: ${ordn(sm.position)} position in class</div>`:''}
+${sm?`<div class="sum"><span><b>${ordn(sm.position)}</b> of ${sm.size}</span><span>Average <b>${sm.average}%</b></span><span>Total <b>${sm.total}</b></span></div>`:''}
+<div class="wrap"><table class="sheet" style="min-width:${200+t.components.length*70}px"><thead><tr><th>Subject</th>${t.components.map(k=>`<th>${esc(k.name)}<br><small>/${k.max}</small></th>`).join('')}<th>Total</th><th>Grade</th><th>Pos.</th></tr></thead>
+<tbody>${t.rows.map(x=>`<tr><td>${esc(x.subject)}</td>${t.components.map(k=>`<td>${esc(x.marks&&x.marks[k.key]!==undefined?x.marks[k.key]:'–')}</td>`).join('')}<td><b>${x.total===null?'–':x.total}</b></td><td><b>${esc(x.grade||'–')}</b></td><td>${x.position?ordn(x.position):'–'}</td></tr>`).join('')}</tbody></table></div></div>`}).join(''):`<div class="card" style="text-align:center"><b>Results not published yet</b><p class="muted">You will see ${esc(ch.name.split(' ')[0])}’s results here once the school publishes them.</p></div>`),bar);wireOut();
+$('bk').onclick=()=>parentHome(c)}
 
 (async function start(){
 if(!db){view(`<div class="err">The app could not load its connection library. Check your internet and reload.</div>`);return}
