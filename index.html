@@ -40,6 +40,14 @@ table{border-collapse:collapse;width:100%}th,td{padding:6px;border-bottom:1px so
 input.sc{width:66px;height:46px;font-size:16px;text-align:center;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);padding:0 4px}input.sc:focus{outline:2px solid var(--teal)}input.sc.bad{border-color:var(--bad);background:var(--badbg)}input.sc:disabled{opacity:.7}
 .sheet td:first-child,.sheet th:first-child{position:sticky;left:0;background:var(--card);z-index:1;min-width:130px;border-right:1px solid var(--line)}.sheet th:first-child{background:var(--soft)}.sheet td,.sheet th{text-align:center}.sheet td:first-child,.sheet th:first-child{text-align:left}
 .stat{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px;margin:8px 0}
+.rcpage{background:#fff;color:#263445;border:1px solid #d9e0e8;border-radius:6px;padding:14px;margin:12px 0;font-size:12px;line-height:1.4}
+.rch{display:flex;align-items:center;gap:10px;border-bottom:2px solid #15345B;padding-bottom:8px}.rch .lg{width:48px;height:48px;border-radius:50%;background:#15345B;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+.rch .nm{flex:1;text-align:center}.rch .nm b{font-size:16px;color:#15345B;display:block}.rch .md{width:48px;height:48px;border-radius:50%;border:2px solid;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;font-size:13px}
+.rcb{margin:8px 0;padding:6px 10px;border-radius:6px;font-weight:700;text-align:center;font-size:13px}.rct{border-collapse:collapse;width:100%;margin:6px 0}.rct th,.rct td{border:1px solid #d9e0e8;padding:4px 5px;text-align:center;font-size:12px;color:#263445}.rct th{background:#E8F5F1;color:#15345B}.rct td:first-child{text-align:left}
+.rcbar{background:#15345B;color:#fff;font-weight:700;padding:3px 8px;margin-top:8px;font-size:12px}.rcg{display:grid;grid-template-columns:1fr 1fr;gap:0}.rcg div{border:1px solid #d9e0e8;padding:3px 6px}.rcg .k{background:#E8F5F1;font-weight:700;color:#15345B}
+.rcbox{border:1px solid #d9e0e8;min-height:34px;padding:4px 6px}.rcsig{display:flex;gap:16px;margin-top:26px;font-size:11px;text-align:center}.rcsig div{flex:1;border-top:1px solid #263445;padding-top:3px}
+@page{size:A4;margin:12mm}
+@media print{html,body{background:#fff!important}.bar,footer,.noprint{display:none!important}main{max-width:none!important;padding:0!important}.rcpage{border:0;border-radius:0;margin:0;padding:0;break-after:page;page-break-after:always;font-size:11px}.rcpage:last-child{break-after:auto;page-break-after:auto}.rcb,.rcbar,.rct th,.rch .lg,.rcg .k{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 footer{padding:12px;text-align:center;font-size:12px;opacity:.75;border-top:1px solid var(--line);background:var(--card)}
 </style></head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#15345B"/><path d="M13 23Q23 18 32 24V47Q23 41 13 45Z" fill="#fff"/><path d="M51 23Q41 18 32 24V47Q41 41 51 45Z" fill="#159A8A"/><circle cx="32" cy="13" r="3.5" fill="#E8B44C"/></symbol></defs></svg>
@@ -175,9 +183,9 @@ const[cl,sc,su,st]=await Promise.all(['classes','sections','subjects','students'
 view(`<h1>School Admin portal</h1><p class="muted" style="margin:0 0 10px">${esc(c.uname)} · ${esc(c.name)}<br>${c.ownership==='public'?'Public':'Private'} school · ${esc(structLabel(c.levels))}</p>
 <div class="card"><b>${cl}</b> classes · <b>${sc}</b> class arms · <b>${su}</b> subjects · <b>${st}</b> students</div>
 ${menu('gs','Set up school','Session, classes, class arms and subjects')}
-${menu('ge','Add students','Paste a list or upload Excel/CSV')}${menu('gl','Students','Search and view enrolled students')}${menu('gt','Staff and leadership','Heads, principals, teachers, exam officers')}${menu('gk','Assign teachers','Give teachers their classes and subjects')}${menu('gr','Review results','Approve, return or publish score sheets')}${menu('gq','Parent requests','Confirm parents and share the school code')}
-<div class="card"><p class="muted" style="margin:0">Next step being connected: report cards.</p></div>`,barHtml(c.name,'School Admin'));wireOut();
-$('gs').onclick=()=>setup(c);$('ge').onclick=()=>enrol(c);$('gl').onclick=()=>studentList(c);$('gt').onclick=()=>staff(c);$('gk').onclick=()=>assign(c);$('gr').onclick=()=>examHome(c);$('gq').onclick=()=>parentRequests(c)}
+${menu('ge','Add students','Paste a list or upload Excel/CSV')}${menu('gl','Students','Search and view enrolled students')}${menu('gt','Staff and leadership','Heads, principals, teachers, exam officers')}${menu('gk','Assign teachers','Give teachers their classes and subjects')}${menu('gr','Review results','Approve, return or publish score sheets')}${menu('gq','Parent requests','Confirm parents and share the school code')}${menu('gc','Report cards','Print or save report cards for a class')}
+<div class="card"><p class="muted" style="margin:0">Report cards are ready for classes with published results.</p></div>`,barHtml(c.name,'School Admin'));wireOut();
+$('gs').onclick=()=>setup(c);$('ge').onclick=()=>enrol(c);$('gl').onclick=()=>studentList(c);$('gt').onclick=()=>staff(c);$('gk').onclick=()=>assign(c);$('gr').onclick=()=>examHome(c);$('gq').onclick=()=>parentRequests(c);$('gc').onclick=()=>reportCards(Object.assign({role:'School Admin'},c))}
 
 async function setup(c,note){
 const[ses,cls,sec,sub]=await Promise.all([
@@ -520,7 +528,7 @@ async function getTerm(sid){const r=await db.from('terms').select('id,name,close
 if(r.error)return{error:r.error};const t=(r.data||[]).filter(x=>x.academic_sessions&&x.academic_sessions.is_current).sort((a,b)=>a.name.localeCompare(b.name))[0];return{term:t||null}}
 const GRP={all:['All',()=>true],review:['To review',r=>['submitted','under_review'].includes(r.status)],returned:['Returned',r=>r.status==='returned'],approved:['Approved',r=>r.status==='approved'],published:['Published',r=>r.status==='published'],none:['Not submitted',r=>['none','draft'].includes(r.status)]};
 async function examHome(c,filter,note){filter=filter||'all';
-const bar=barHtml(c.name,c.role||'Review');const g=await getTerm(c.sid);
+const bar=barHtml(c.name,c.role||'Review');c.role=c.role||'Examination Officer';const g=await getTerm(c.sid);
 if(g.error)return view(`<div class="err">${esc(g.error.message)}</div>`,bar);
 if(!g.term){view(`<h1>Review results</h1><div class="warn">No current term yet. The School Admin must set up the session and terms.</div>`,bar);wireOut();return}
 const[sh,as]=await Promise.all([db.from('score_sheets').select('id,section_id,subject_id,status,review_note').eq('term_id',g.term.id),
@@ -533,7 +541,9 @@ view(`<h1>Review results</h1><p class="muted" style="margin:0 0 8px">${esc(g.ter
 <div class="card"><b>${cnt('review')}</b> to review · <b>${cnt('returned')}</b> returned · <b>${cnt('approved')}</b> approved · <b>${cnt('published')}</b> published · <b>${cnt('none')}</b> not submitted</div>
 <div class="chips" style="margin-bottom:8px">${Object.entries(GRP).map(([k,v])=>`<button class="tab" data-f="${k}" aria-pressed="${filter===k}" style="flex:none;padding:0 12px;height:40px">${v[0]}</button>`).join('')}</div>
 ${list.length?list.map(r=>{const p=SHEET_ST[r.status==='none'?'draft':r.status];return`<button class="menu" data-i="${rows.indexOf(r)}"><span><b>${esc(r.label)}</b><small>${esc(r.teacher)}</small></span><span class="pill ${p[1]}">${r.status==='none'?'Not started':p[0]}</span></button>`}).join(''):'<p class="muted">Nothing here.</p>'}
+<button class="menu" id="grc"><span><b>Report cards</b><small>Print or save report cards for a class</small></span><span class="go">Open</span></button>
 <div class="card"><p class="muted" style="margin:0">Only teacher assignments appear here. Assign teachers first (School Admin → Assign teachers).</p></div>`,bar);wireOut();
+$('grc').onclick=()=>reportCards(Object.assign({},c,{role:'Examination Officer'}));
 document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>examHome(c,b.dataset.f));
 document.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>examSheet(c,g.term,rows[+b.dataset.i],filter))}
 
@@ -620,8 +630,47 @@ view(head+(T.length?T.map(t=>{const sm=t.summary,tp=sm&&PTOP[sm.position];return
 ${tp?`<div style="background:${tp[0]};color:${tp[1]};border-radius:10px;padding:10px 12px;font-weight:700;margin:8px 0">Top performer: ${ordn(sm.position)} position in class</div>`:''}
 ${sm?`<div class="sum"><span><b>${ordn(sm.position)}</b> of ${sm.size}</span><span>Average <b>${sm.average}%</b></span><span>Total <b>${sm.total}</b></span></div>`:''}
 <div class="wrap"><table class="sheet" style="min-width:${200+t.components.length*70}px"><thead><tr><th>Subject</th>${t.components.map(k=>`<th>${esc(k.name)}<br><small>/${k.max}</small></th>`).join('')}<th>Total</th><th>Grade</th><th>Pos.</th></tr></thead>
-<tbody>${t.rows.map(x=>`<tr><td>${esc(x.subject)}</td>${t.components.map(k=>`<td>${esc(x.marks&&x.marks[k.key]!==undefined?x.marks[k.key]:'–')}</td>`).join('')}<td><b>${x.total===null?'–':x.total}</b></td><td><b>${esc(x.grade||'–')}</b></td><td>${x.position?ordn(x.position):'–'}</td></tr>`).join('')}</tbody></table></div></div>`}).join(''):`<div class="card" style="text-align:center"><b>Results not published yet</b><p class="muted">You will see ${esc(ch.name.split(' ')[0])}’s results here once the school publishes them.</p></div>`),bar);wireOut();
-$('bk').onclick=()=>parentHome(c)}
+<tbody>${t.rows.map(x=>`<tr><td>${esc(x.subject)}</td>${t.components.map(k=>`<td>${esc(x.marks&&x.marks[k.key]!==undefined?x.marks[k.key]:'–')}</td>`).join('')}<td><b>${x.total===null?'–':x.total}</b></td><td><b>${esc(x.grade||'–')}</b></td><td>${x.position?ordn(x.position):'–'}</td></tr>`).join('')}</tbody></table></div><button class="s" data-rep="${T.indexOf(t)}" style="width:100%;margin-top:8px">Report card (print / PDF)</button></div>`}).join(''):`<div class="card" style="text-align:center"><b>Results not published yet</b><p class="muted">You will see ${esc(ch.name.split(' ')[0])}’s results here once the school publishes them.</p></div>`),bar);wireOut();
+$('bk').onclick=()=>parentHome(c);
+document.querySelectorAll('[data-rep]').forEach(b=>b.onclick=()=>parentReport(c,ch,T[+b.dataset.rep]))}
+
+
+// ===== Report cards (printable A4; "Save as PDF" from the print screen) =====
+function reportCardHtml(o){
+const sc=o.school||{},st=o.stu,sm=st.summary,tp=sm&&PTOP[sm.position],ini=(sc.name||'S').split(/\s+/).map(w=>w[0]).join('').slice(0,3).toUpperCase(),comps=o.components||[];
+const next=o.term&&o.term.next_resumption?new Date(o.term.next_resumption).toLocaleDateString():'To be announced';
+return`<div class="rcpage"><div class="rch"><div class="lg">${esc(ini)}</div><div class="nm"><b>${esc((sc.name||'').toUpperCase())}</b>${esc(sc.address||'')}<br>${esc([sc.phone,sc.email].filter(Boolean).join(' · '))}</div>${tp?`<div class="md" style="background:${tp[0]};color:${tp[1]};border-color:${tp[1]}">${ordn(sm.position)}</div>`:'<div style="width:48px"></div>'}</div>
+${tp?`<div class="rcb" style="background:${tp[0]};color:${tp[1]}">TOP PERFORMER: ${ordn(sm.position)} POSITION IN CLASS</div>`:''}
+<div class="rcbar">TERMINAL REPORT CARD</div>
+<div class="rcg"><div class="k">Name</div><div>${esc(st.name)}</div><div class="k">Admission no.</div><div>${esc(st.adm)}</div><div class="k">Class</div><div>${esc(o.cls||'')}</div><div class="k">Gender</div><div>${esc(st.gender||'')}</div><div class="k">Session</div><div>${esc(o.term?o.term.session:'')}</div><div class="k">Term</div><div>${esc(o.term?o.term.term:'')}</div><div class="k">Position in class</div><div>${sm?ordn(sm.position)+' of '+sm.size:'–'}</div><div class="k">Average</div><div>${sm?sm.average+'%':'–'}</div></div>
+<div class="rcbar">ACADEMIC PERFORMANCE</div>
+<table class="rct"><thead><tr><th>Subject</th>${comps.map(k=>`<th>${esc(k.name)}<br>/${k.max}</th>`).join('')}<th>Total</th><th>Grade</th><th>Pos.</th><th>Remark</th><th>Class avg.</th></tr></thead><tbody>${st.rows.map(r=>`<tr><td>${esc(r.subject)}</td>${comps.map(k=>`<td>${esc(r.marks&&r.marks[k.key]!==undefined?r.marks[k.key]:'–')}</td>`).join('')}<td><b>${r.total===null?'–':r.total}</b></td><td><b>${esc(r.grade||'–')}</b></td><td>${r.position?ordn(r.position):'–'}</td><td>${esc(r.remark||'')}</td><td>${r.class_avg??'–'}</td></tr>`).join('')}</tbody></table>
+${sm?`<div><b>Total score:</b> ${sm.total} &nbsp; <b>Average:</b> ${sm.average}%</div>`:''}
+<div class="rcbar">ATTENDANCE AND NEXT TERM</div><div class="rcg"><div class="k">Days school opened</div><div>&nbsp;</div><div class="k">Days present / absent</div><div>&nbsp;</div><div class="k">Next term resumes</div><div>${esc(next)}</div><div class="k"></div><div></div></div>
+<div class="rcbar">COMMENTS</div><div class="rcbox"><b>Class teacher:</b></div><div class="rcbox"><b>Head teacher / Principal:</b></div>
+<div class="rcsig"><div>Class teacher signature</div><div>Head signature</div><div>School stamp</div></div><div style="text-align:center;color:#777;font-size:9px;margin-top:10px">Generated with EduSchool Management</div></div>`}
+
+function showCards(c,bar,back,title,pages,backFn){
+view(`<div class="noprint"><button class="l" id="bk">← ${esc(back)}</button><h1>${esc(title)}</h1><p class="muted" style="margin:0 0 8px">${pages.length} report card${pages.length===1?'':'s'}. Tap the button, then choose <b>Save as PDF</b> as the printer.</p><button class="b" id="pr">Print / Save as PDF</button></div>${pages.join('')}`,bar);wireOut();
+$('bk').onclick=backFn;$('pr').onclick=()=>{try{window.print()}catch(e){alert('Printing is not available here. Open this page in Chrome.')}}}
+
+async function reportCards(c){
+const bar=barHtml(c.name,c.role||'School Admin'),back=`<button class="l" id="bk">← Back</button><h1>Report cards</h1>`,goBack=()=>c.role==='Examination Officer'?examHome(c):adminHome(c);
+const[so,g]=await Promise.all([secOptions(c),getTerm(c.sid)]);
+if(so.error||g.error){view(back+`<div class="err">${esc((so.error||g.error).message)}</div>`,bar);wireOut();$('bk').onclick=goBack;return}
+if(!g.term||!so.data.length){view(back+'<div class="warn">Set up a session, classes and class arms first.</div>',bar);wireOut();$('bk').onclick=goBack;return}
+view(back+`<div id="m" class="err" hidden role="alert"></div><div class="card"><p class="muted" style="margin:0 0 6px">${esc(g.term.academic_sessions.name)} · ${esc(g.term.name)}. Only <b>published</b> results appear on report cards.</p>
+<label for="sa">Class and arm</label><select id="sa">${so.data.map(x=>`<option value="${x.id}">${esc(x.label)}</option>`).join('')}</select><button class="b" id="go">Show report cards</button></div>`,bar);wireOut();
+$('bk').onclick=goBack;
+$('go').onclick=async()=>{busy($('go'),true,'Show report cards');const r=await db.rpc('class_report_cards',{p_section:$('sa').value,p_term:g.term.id});busy($('go'),false,'Show report cards');
+if(r.error)return msg('m',r.error.message&&/does not exist/i.test(r.error.message)?'The database update 0008 has not been run yet.':friendly(r.error));
+const d=r.data,S=d.students||[];if(!S.length)return msg('m','No published results for this class yet. Publish the score sheets first.');
+const pages=S.map(stu=>reportCardHtml({school:d.school,cls:d.class,term:d.term,components:d.components,stu}));
+showCards(c,bar,'Report cards',d.class+' report cards',pages,()=>reportCards(c))}}
+
+function parentReport(c,ch,t){
+const bar=barHtml('EduSchool','Parent');
+showCards(c,bar,'Results','Report card',[reportCardHtml({school:{name:ch.school,address:ch.school_address,phone:ch.school_phone,email:ch.school_email},cls:ch.class,term:t,components:t.components,stu:{name:ch.name,adm:ch.admission_no,gender:ch.gender,rows:t.rows,summary:t.summary}})],()=>parentChild(c,ch))}
 
 (async function start(){
 if(!db){view(`<div class="err">The app could not load its connection library. Check your internet and reload.</div>`);return}
